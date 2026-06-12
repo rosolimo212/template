@@ -1,0 +1,24 @@
+# Скопируйте этот файл в config.yaml и заполните своими значениями.
+# config.yaml не попадает в git.
+
+app:
+  # streamlit | telegram | console
+  interface: streamlit
+  logging_enabled: true
+
+weatherapi:
+  url: http://api.weatherapi.com/v1
+  method: /current.json
+  api_key: YOUR_KEY_HERE
+  city: Moscow
+
+telegram:
+  token: YOUR_TOKEN_HERE
+
+logging:
+  host: localhost
+  port: 5432
+  database: iter_template_stage
+  user: watcher
+  password: YOUR_PASSWORD_HERE
+  schema: template

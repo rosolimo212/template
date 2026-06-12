@@ -209,6 +209,24 @@ tempCodeRunnerFile.py
 # PyPI configuration file
 .pypirc
 
+# --- project-specific (iter_template / template) ---
+config.yaml
+*.csv
+*.yaml
+!config.example.yaml
+data/user_counter.json
+.venv/
+venv/
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.pdf
+*.zip
+*.tar
+*.gz
+
 # Marimo
 marimo/_static/
 marimo/_lsp/
