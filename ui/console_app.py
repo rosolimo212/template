@@ -1,27 +1,127 @@
 # coding: utf-8
 """
 Консольный клиент для отладки ядра без браузера и telegram.
+
+Цель:
+    Полный цикл MVP через input/print.
 """
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
+from core.models import ACTION_DIARY_TEXT, ACTION_NAME_ENTERED, Screen
 from ui.base import build_app_service
+from ui.helpers import apply_response, build_payload
+
+
+def _print_response(state: dict[str, Any]) -> None:
+    print()
+    print(state.get("last_text", ""))
+    print()
 
 
 def run_console(config: dict[str, Any]) -> None:
     """
-    Минимальный консольный цикл для проверки ядра.
+    Консольный цикл MVP.
 
     :param config: конфиг из config.yaml
     """
     service = build_app_service(config)
-    user_id = service.logger.allocate_user_id()
-    response = service.handle_start(user_id, "console")
+    state: dict[str, Any] = {
+        "user_id": service.logger.allocate_user_id(),
+    }
 
-    print("=== Template console (фаза 0) ===")
-    print(response.text)
-    print(f"user_id: {user_id}")
-    print("Для выхода нажмите Enter.")
-    input()
+    response = service.handle_start(state["user_id"], "console")
+    apply_response(state, response)
+
+    print("=== Template console ===")
+    print(f"user_id: {state['user_id']}")
+    _print_response(state)
+
+    while True:
+        screen = state.get("screen", Screen.START.value)
+
+        if screen == Screen.START.value:
+            text = input("> ").strip()
+            if text.lower() in ("exit", "quit", "выход"):
+                break
+            response = service.handle_action(
+                state["user_id"],
+                "console",
+                ACTION_NAME_ENTERED,
+                build_payload(text=text),
+            )
+            user_name = None
+            reg_date = None
+            if response.screen == Screen.MAIN_MENU:
+                user_name = text
+                reg_date = datetime.now().isoformat()
+            apply_response(
+                state,
+                response,
+                user_name=user_name,
+                registration_date=reg_date,
+            )
+            _print_response(state)
+            continue
+
+        if screen == Screen.DIARY_WAIT.value:
+            print("Введите запись (или 'меню' для возврата):")
+            text = input("> ").strip()
+            if text.lower() in ("exit", "quit", "выход"):
+                break
+            response = service.handle_action(
+                state["user_id"],
+                "console",
+                ACTION_DIARY_TEXT,
+                {
+                    **build_payload(
+                        user_name=state.get("user_name"),
+                        registration_date=state.get("registration_date"),
+                    ),
+                    **build_payload(text=text, screen=screen),
+                },
+            )
+            apply_response(state, response)
+            _print_response(state)
+            continue
+
+        buttons = state.get("buttons", [])
+        if buttons:
+            print("Меню:")
+            for idx, label in enumerate(buttons, start=1):
+                print(f"  {idx}. {label}")
+            print("  0. Выход")
+
+        choice = input("> ").strip()
+        if choice in ("0", "exit", "quit", "выход"):
+            break
+
+        if choice.isdigit() and buttons:
+            idx = int(choice) - 1
+            if 0 <= idx < len(buttons):
+                text = buttons[idx]
+            else:
+                print("Нет такого пункта.")
+                continue
+        else:
+            text = choice
+
+        response = service.handle_action(
+            state["user_id"],
+            "console",
+            "raw",
+            {
+                **build_payload(
+                    user_name=state.get("user_name"),
+                    registration_date=state.get("registration_date"),
+                ),
+                **build_payload(text=text, screen=screen),
+            },
+        )
+        apply_response(state, response)
+        _print_response(state)
+
+    print("До встречи.")

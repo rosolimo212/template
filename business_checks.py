@@ -29,6 +29,9 @@ def check_project_scaffold_exists() -> None:
         "core/db.py",
         "core/logging/postgres.py",
         "ui/streamlit_app.py",
+        "ui/helpers.py",
+        "ui/console_app.py",
+        "ui/telegram_bot.py",
         "sql/001_init.sql",
         "data/jokes.json",
     ]

@@ -19,9 +19,9 @@
 - [x] Полный сценарий MVP в `core/app.py` и `brain.py`
 
 ## Фаза 5 — UI
-- [ ] Streamlit: регистрация, меню, 3 опции
-- [ ] Telegram: то же через aiogram
-- [ ] Console: полный цикл
+- [x] Streamlit: регистрация, меню, 3 опции
+- [x] Telegram: то же через aiogram
+- [x] Console: полный цикл
 
 ## Фаза 6 — тесты
 - [ ] Расширить `business_checks.py` по task.md
