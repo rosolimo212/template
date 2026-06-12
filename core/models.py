@@ -25,6 +25,16 @@ class Screen(str, Enum):
     OPTION_1 = "option_1"
     OPTION_2 = "option_2"
     OPTION_3 = "option_3"
+    DIARY_WAIT = "diary_wait"
+
+
+# Действия, которые UI передаёт в AppService.handle_action
+ACTION_NAME_ENTERED = "name_entered"
+ACTION_OPTION_1 = "option_1"
+ACTION_OPTION_2 = "option_2"
+ACTION_OPTION_3 = "option_3"
+ACTION_DIARY_TEXT = "diary_text"
+ACTION_BACK_TO_MENU = "back_to_menu"
 
 
 @dataclass

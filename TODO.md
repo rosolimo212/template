@@ -16,7 +16,7 @@
 - [x] `collectors/jokes.py` — чтение `data/jokes.json`
 
 ## Фаза 4 — AppService
-- [ ] Полный сценарий MVP в `core/app.py` и `brain.py`
+- [x] Полный сценарий MVP в `core/app.py` и `brain.py`
 
 ## Фаза 5 — UI
 - [ ] Streamlit: регистрация, меню, 3 опции

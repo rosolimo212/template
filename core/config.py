@@ -88,9 +88,20 @@ def load_app_config(yaml_file: str | Path = "config.yaml") -> dict[str, Any]:
     if logging_cfg.get("schema") != "template":
         raise ValueError("Схема логирования должна называться template")
 
-    return {
+    result = {
         "app": app_cfg,
         "weatherapi": weather_cfg,
         "telegram": telegram_cfg,
         "logging": logging_cfg,
     }
+
+    with path.open("r", encoding="utf-8") as yaml_stream:
+        full_cfg = yaml.full_load(yaml_stream)
+
+    if isinstance(full_cfg.get("paths"), dict):
+        result["paths"] = full_cfg["paths"]
+
+    if isinstance(full_cfg.get("testing"), dict):
+        result["testing"] = full_cfg["testing"]
+
+    return result
