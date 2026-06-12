@@ -24,5 +24,5 @@
 - [x] Console: полный цикл
 
 ## Фаза 6 — тесты
-- [ ] Расширить `business_checks.py` по task.md
-- [ ] Спецсимволы, логирование событий, upsert users
+- [x] Расширить `business_checks.py` по task.md
+- [x] Спецсимволы, логирование событий, upsert users
