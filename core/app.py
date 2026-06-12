@@ -62,6 +62,9 @@ class AppService:
         :param channel: streamlit | telegram | console
         :return: ответ для UI
         """
+        # events.user_id ссылается на users — строка нужна до start_screen_visit.
+        # Имя и дата регистрации обновятся при вводе user_name.
+        self._ensure_user_stub(user_id, channel)
         self.logger.log_event(
             user_id=user_id,
             event_name="start_screen_visit",
@@ -69,6 +72,21 @@ class AppService:
             event_parameters=None,
         )
         return on_start()
+
+    def _ensure_user_stub(self, user_id: int, channel: str) -> None:
+        """
+        Создаёт или обновляет заглушку пользователя до регистрации.
+
+        user_name пустой до ввода имени; registration_date перезапишется при регистрации.
+        """
+        now = datetime.now()
+        self.logger.upsert_user(
+            user_id=user_id,
+            user_name="",
+            registration_date=now,
+            registration_channel=channel,
+            last_active_at=now,
+        )
 
     def handle_action(
         self,

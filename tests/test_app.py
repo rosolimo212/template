@@ -92,6 +92,15 @@ def _user_payload(user_name: str, registration_date: datetime) -> dict[str, Any]
     }
 
 
+def test_handle_start_creates_user_before_event() -> None:
+    service, logger = _make_service()
+    service.handle_start(1, "streamlit")
+
+    assert 1 in logger.users
+    assert logger.users[1]["user_name"] == ""
+    assert logger.events[0]["event_name"] == "start_screen_visit"
+
+
 def test_full_mvp_flow_logs_all_events() -> None:
     service, logger = _make_service()
     user_id = 1
