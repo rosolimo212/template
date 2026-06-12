@@ -7,7 +7,7 @@
     Запускаются перед коммитом вместе с pytest.
 
 Вход:
-    Импорты из iter_core / iter_ui по мере появления логики.
+    Импорты из core / ui по мере появления логики.
 
 Выход:
     Ненулевой код выхода при первой неудачной проверке.
@@ -18,15 +18,17 @@ TODO:
 
 
 def check_project_scaffold_exists() -> None:
-    """Каркас фазы 0: ключевые модули на месте."""
+    """Каркас проекта: ключевые модули на месте."""
     from pathlib import Path
 
     root = Path(__file__).resolve().parent
     required = [
-        "iter_core/app.py",
-        "iter_core/brain.py",
-        "iter_core/config.py",
-        "iter_ui/streamlit_app.py",
+        "core/app.py",
+        "core/brain.py",
+        "core/config.py",
+        "core/db.py",
+        "core/logging/postgres.py",
+        "ui/streamlit_app.py",
         "sql/001_init.sql",
         "data/jokes.json",
     ]
@@ -35,8 +37,33 @@ def check_project_scaffold_exists() -> None:
         raise AssertionError("Не найдены файлы каркаса: " + ", ".join(missing))
 
 
+def check_logger_factory_builds() -> None:
+    """Фабрика логгера создаёт postgres или noop без ошибок."""
+    from core.logging.factory import build_logger
+
+    noop_cfg = {
+        "app": {"logging_enabled": False},
+        "logging": {"schema": "template"},
+    }
+    pg_cfg = {
+        "app": {"logging_enabled": True},
+        "logging": {
+            "host": "localhost",
+            "port": 5432,
+            "database": "db",
+            "user": "u",
+            "password": "p",
+            "schema": "template",
+        },
+    }
+
+    build_logger(noop_cfg)
+    build_logger(pg_cfg)
+
+
 def run_all_checks() -> None:
     check_project_scaffold_exists()
+    check_logger_factory_builds()
     print("business_checks: OK")
 
 

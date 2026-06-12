@@ -10,8 +10,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from iter_core.app import AppService
-from iter_core.logging.factory import build_logger
+from core.app import AppService
+from core.logging.factory import build_logger
 
 
 def build_app_service(config: dict[str, Any]) -> AppService:

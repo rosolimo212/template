@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from iter_core.logging.noop import NoopLogger
+from core.logging.noop import NoopLogger
 
 
 def test_noop_logger_incremental_ids(tmp_path: Path) -> None:

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from iter_ui.base import build_app_service
+from ui.base import build_app_service
 
 
 def run_console(config: dict[str, Any]) -> None:

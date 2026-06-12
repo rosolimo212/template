@@ -19,9 +19,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from iter_core.brain import on_start, on_unknown_action
-from iter_core.logging.base import EventLogger
-from iter_core.models import AppResponse
+from core.brain import on_start, on_unknown_action
+from core.logging.base import EventLogger
+from core.models import AppResponse
 
 
 class AppService:

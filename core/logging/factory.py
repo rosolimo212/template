@@ -7,9 +7,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from iter_core.logging.base import EventLogger
-from iter_core.logging.noop import NoopLogger
-from iter_core.logging.postgres import PostgresLogger
+from core.logging.base import EventLogger
+from core.logging.noop import NoopLogger
+from core.logging.postgres import PostgresLogger
 
 
 def build_logger(config: dict[str, Any]) -> EventLogger:

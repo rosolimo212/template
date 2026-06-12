@@ -16,7 +16,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from iter_core.logging.base import EventLogger
+from core.logging.base import EventLogger
 
 DEFAULT_COUNTER_PATH = Path("data/user_counter.json")
 

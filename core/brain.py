@@ -17,7 +17,7 @@ TODO:
 
 from __future__ import annotations
 
-from iter_core.models import AppResponse, Screen
+from core.models import AppResponse, Screen
 
 
 def on_start() -> AppResponse:

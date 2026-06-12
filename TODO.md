@@ -4,18 +4,19 @@
 
 ## Фаза 1 — конфиг
 - [x] `config.example.yaml`
-- [x] `iter_core/config.py`
+- [x] `core/config.py`
+- [x] `core/db.py`
 
 ## Фаза 2 — postgres-логирование
-- [ ] Реализовать `PostgresLogger` (SQLAlchemy + pandas)
-- [ ] `allocate_user_id` через postgres sequence
+- [x] Реализовать `PostgresLogger` (SQLAlchemy + pandas)
+- [x] `allocate_user_id` через postgres sequence
 
 ## Фаза 3 — коллекторы
 - [ ] `collectors/weather.py` — weatherapi.com
 - [ ] `collectors/jokes.py` — чтение `data/jokes.json`
 
 ## Фаза 4 — AppService
-- [ ] Полный сценарий MVP в `iter_core/app.py` и `brain.py`
+- [ ] Полный сценарий MVP в `core/app.py` и `brain.py`
 
 ## Фаза 5 — UI
 - [ ] Streamlit: регистрация, меню, 3 опции

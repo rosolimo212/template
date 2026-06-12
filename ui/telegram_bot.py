@@ -17,7 +17,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.filters import CommandStart
 from aiogram.types import Message
 
-from iter_ui.base import build_app_service
+from ui.base import build_app_service
 
 
 async def run_telegram(config: dict[str, Any]) -> None:

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from iter_core.config import load_app_config, read_yaml_config
+from core.config import load_app_config, read_yaml_config
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLE_CONFIG = ROOT / "config.example.yaml"

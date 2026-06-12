@@ -3,8 +3,8 @@
 
 from __future__ import annotations
 
-from iter_core.brain import on_name_entered, on_start
-from iter_core.models import Screen
+from core.brain import on_name_entered, on_start
+from core.models import Screen
 
 
 def test_on_start_asks_name() -> None:
