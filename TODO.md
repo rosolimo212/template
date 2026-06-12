@@ -12,8 +12,8 @@
 - [x] `allocate_user_id` через postgres sequence
 
 ## Фаза 3 — коллекторы
-- [ ] `collectors/weather.py` — weatherapi.com
-- [ ] `collectors/jokes.py` — чтение `data/jokes.json`
+- [x] `collectors/weather.py` — weatherapi.com
+- [x] `collectors/jokes.py` — чтение `data/jokes.json`
 
 ## Фаза 4 — AppService
 - [ ] Полный сценарий MVP в `core/app.py` и `brain.py`
