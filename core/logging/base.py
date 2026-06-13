@@ -50,3 +50,11 @@ class EventLogger(ABC):
         timestamp: datetime | None = None,
     ) -> None:
         """Записать событие в events."""
+
+    def get_user_profile(self, identity: UserIdentity) -> dict[str, Any] | None:
+        """
+        Профиль из users: user_name, registration_date.
+
+        Пустой user_name означает, что регистрация ещё не завершена.
+        """
+        return None

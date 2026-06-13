@@ -8,8 +8,11 @@ from pathlib import Path
 from typing import Any
 
 from core.brain import (
+    CHANGE_NAME_BUTTON,
+    CONFIRM_NAME_BUTTON,
     is_back_to_menu,
     match_menu_button,
+    on_change_name_prompt,
     on_diary_empty,
     on_diary_saved,
     on_empty_name,
@@ -19,6 +22,7 @@ from core.brain import (
     on_option_2_result,
     on_option_3_prompt,
     on_start,
+    on_telegram_name_confirm,
 )
 from core.collectors.jokes import get_random_joke
 from core.collectors.weather import get_current_temperature
@@ -26,6 +30,8 @@ from core.logging.base import EventLogger
 from core.models import (
     ACTION_BACK_TO_MENU,
     ACTION_DIARY_TEXT,
+    ACTION_NAME_CHANGE,
+    ACTION_NAME_CONFIRMED,
     ACTION_NAME_ENTERED,
     ACTION_OPTION_1,
     ACTION_OPTION_2,
@@ -50,9 +56,35 @@ class AppService:
         """Перепроверяет пользователя в БД по external_user_id (одна строка на сессию)."""
         return self.logger.ensure_user(channel, identity.external_user_id)
 
-    def handle_start(self, identity: UserIdentity, channel: str) -> AppResponse:
+    def handle_start(
+        self,
+        identity: UserIdentity,
+        channel: str,
+        context: dict[str, Any] | None = None,
+    ) -> AppResponse:
         """Первый визит / команда start."""
+        context = context or {}
         identity = self._resolve_identity(identity, channel)
+
+        profile = self.logger.get_user_profile(identity)
+        existing_name = (profile or {}).get("user_name", "").strip()
+        if existing_name:
+            self._touch_user(
+                identity,
+                channel,
+                {
+                    "user_name": existing_name,
+                    "registration_date": (profile or {}).get("registration_date"),
+                },
+            )
+            self.logger.log_event(
+                identity=identity,
+                event_name="start_screen_visit",
+                channel=channel,
+                event_parameters=None,
+            )
+            return on_name_entered(existing_name)
+
         self._ensure_user_stub(identity, channel)
         self.logger.log_event(
             identity=identity,
@@ -60,6 +92,18 @@ class AppService:
             channel=channel,
             event_parameters=None,
         )
+
+        if channel == "telegram":
+            telegram_username = str(context.get("telegram_username") or "").strip()
+            if telegram_username:
+                return self._register_with_name(
+                    identity,
+                    channel,
+                    telegram_username.lstrip("@"),
+                    registration_source="telegram_username",
+                    confirm=True,
+                )
+
         return on_start()
 
     def _ensure_user_stub(self, identity: UserIdentity, channel: str) -> None:
@@ -83,6 +127,12 @@ class AppService:
 
         if action == ACTION_NAME_ENTERED:
             return self._handle_name_entered(identity, channel, payload)
+
+        if action == ACTION_NAME_CONFIRMED:
+            return self._handle_name_confirmed(identity, channel, payload)
+
+        if action == ACTION_NAME_CHANGE:
+            return on_change_name_prompt()
 
         if action == ACTION_OPTION_1:
             return self._handle_option_1(identity, channel, payload)
@@ -119,6 +169,15 @@ class AppService:
             payload_with_text["text"] = raw_text
             return self._handle_name_entered(identity, channel, payload_with_text)
 
+        if screen == Screen.NAME_CONFIRM.value or screen == Screen.NAME_CONFIRM:
+            if raw_text == CONFIRM_NAME_BUTTON:
+                return self._handle_name_confirmed(identity, channel, payload)
+            if raw_text == CHANGE_NAME_BUTTON:
+                return on_change_name_prompt()
+            payload_with_text = dict(payload)
+            payload_with_text["text"] = raw_text
+            return self._handle_name_entered(identity, channel, payload_with_text)
+
         if screen == Screen.DIARY_WAIT.value or screen == Screen.DIARY_WAIT:
             if is_back_to_menu(raw_text):
                 return self._handle_back_to_menu(identity, channel, payload)
@@ -137,16 +196,15 @@ class AppService:
         self._touch_user(identity, channel, payload)
         return on_main_menu_reminder()
 
-    def _handle_name_entered(
+    def _register_with_name(
         self,
         identity: UserIdentity,
         channel: str,
-        payload: dict[str, Any],
+        user_name: str,
+        *,
+        registration_source: str,
+        confirm: bool = False,
     ) -> AppResponse:
-        user_name = str(payload.get("text", "")).strip()
-        if not user_name:
-            return on_empty_name()
-
         identity = self._resolve_identity(identity, channel)
         now = datetime.now()
         self.logger.upsert_user(
@@ -160,8 +218,13 @@ class AppService:
             identity=identity,
             event_name="registration",
             channel=channel,
-            event_parameters={"user_name": user_name},
+            event_parameters={
+                "user_name": user_name,
+                "source": registration_source,
+            },
         )
+        if confirm:
+            return on_telegram_name_confirm(user_name)
         self.logger.log_event(
             identity=identity,
             event_name="main_menu_visit",
@@ -169,6 +232,45 @@ class AppService:
             event_parameters=None,
         )
         return on_name_entered(user_name)
+
+    def _handle_name_confirmed(
+        self,
+        identity: UserIdentity,
+        channel: str,
+        payload: dict[str, Any],
+    ) -> AppResponse:
+        user_name = str(payload.get("user_name", "")).strip()
+        if not user_name:
+            return on_empty_name()
+
+        identity = self._resolve_identity(identity, channel)
+        self._touch_user(identity, channel, payload)
+        self.logger.log_event(
+            identity=identity,
+            event_name="main_menu_visit",
+            channel=channel,
+            event_parameters=None,
+        )
+        return on_name_entered(user_name)
+
+    def _handle_name_entered(
+        self,
+        identity: UserIdentity,
+        channel: str,
+        payload: dict[str, Any],
+    ) -> AppResponse:
+        user_name = str(payload.get("text", "")).strip()
+        if not user_name:
+            return on_empty_name()
+
+        identity = self._resolve_identity(identity, channel)
+        return self._register_with_name(
+            identity,
+            channel,
+            user_name,
+            registration_source="user_input",
+            confirm=False,
+        )
 
     def _handle_option_1(
         self,

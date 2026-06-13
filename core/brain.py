@@ -23,6 +23,18 @@ MENU_BUTTONS = [
 ]
 
 BACK_TO_MENU_BUTTON = "В главное меню"
+CONFIRM_NAME_BUTTON = "Всё верно"
+CHANGE_NAME_BUTTON = "Изменить имя"
+
+
+def format_display_name(user_name: str, *, with_at: bool = False) -> str:
+    """Форматирует имя для показа пользователю."""
+    clean = user_name.strip().lstrip("@")
+    if not clean:
+        return user_name
+    if with_at:
+        return f"@{clean}"
+    return clean
 
 
 def on_start() -> AppResponse:
@@ -55,6 +67,28 @@ def on_name_entered(user_name: str) -> AppResponse:
         ),
         buttons=list(MENU_BUTTONS),
         screen=Screen.MAIN_MENU,
+    )
+
+
+def on_telegram_name_confirm(user_name: str) -> AppResponse:
+    """Telegram: ник подставлен автоматически, можно подтвердить или изменить."""
+    display = format_display_name(user_name, with_at=True)
+    return AppResponse(
+        text=(
+            f"Будем обращаться к вам как «{display}».\n\n"
+            "Если хотите другое имя — нажмите «Изменить имя» или просто напишите его."
+        ),
+        buttons=[CONFIRM_NAME_BUTTON, CHANGE_NAME_BUTTON],
+        screen=Screen.NAME_CONFIRM,
+    )
+
+
+def on_change_name_prompt() -> AppResponse:
+    """Запрос другого имени (Telegram)."""
+    return AppResponse(
+        text="Как к вам обращаться?",
+        buttons=[],
+        screen=Screen.START,
     )
 
 

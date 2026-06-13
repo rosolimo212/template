@@ -81,6 +81,32 @@ class PostgresLogger(EventLogger):
             external_user_id=str(row[2]),
         )
 
+    def get_user_profile(self, identity: UserIdentity) -> dict[str, Any] | None:
+        table_name = f"{self.schema}.users"
+        conn = get_connection(self.logging_config)
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    SELECT user_name, registration_date
+                    FROM {table_name}
+                    WHERE user_id = %s
+                    """,
+                    (identity.user_id,),
+                )
+                row = cur.fetchone()
+            conn.commit()
+        finally:
+            conn.close()
+
+        if row is None:
+            return None
+
+        return {
+            "user_name": str(row[0] or ""),
+            "registration_date": row[1],
+        }
+
     def ensure_user(self, channel: str, external_user_id: str) -> UserIdentity:
         existing = self._find_user(channel, external_user_id)
         if existing is not None:

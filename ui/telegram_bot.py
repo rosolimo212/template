@@ -19,13 +19,22 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import KeyboardButton, Message, ReplyKeyboardMarkup
 
-from core.models import ACTION_DIARY_TEXT, ACTION_NAME_ENTERED, Screen, UserIdentity
+from core.brain import CHANGE_NAME_BUTTON, CONFIRM_NAME_BUTTON
+from core.models import (
+    ACTION_DIARY_TEXT,
+    ACTION_NAME_CHANGE,
+    ACTION_NAME_CONFIRMED,
+    ACTION_NAME_ENTERED,
+    Screen,
+    UserIdentity,
+)
 from ui.base import build_app_service
 from ui.helpers import apply_response, build_payload, store_identity
 
 
 class Flow(StatesGroup):
     start = State()
+    name_confirm = State()
     main_menu = State()
     diary = State()
 
@@ -51,6 +60,33 @@ def _identity_from_data(data: dict[str, Any]) -> UserIdentity:
     )
 
 
+def _state_for_screen(screen: Screen) -> State:
+    if screen == Screen.START:
+        return Flow.start
+    if screen == Screen.NAME_CONFIRM:
+        return Flow.name_confirm
+    if screen == Screen.DIARY_WAIT:
+        return Flow.diary
+    return Flow.main_menu
+
+
+def _sync_profile(service, identity: UserIdentity, session_state: dict[str, Any]) -> None:
+    profile = service.logger.get_user_profile(identity)
+    if not profile:
+        return
+
+    user_name = str(profile.get("user_name") or "").strip()
+    if user_name:
+        session_state["user_name"] = user_name
+
+    reg_date = profile.get("registration_date")
+    if reg_date is not None:
+        if isinstance(reg_date, datetime):
+            session_state["registration_date"] = reg_date.isoformat()
+        else:
+            session_state["registration_date"] = str(reg_date)
+
+
 async def run_telegram(config: dict[str, Any]) -> None:
     token = config["telegram"]["token"]
     service = build_app_service(config)
@@ -63,13 +99,17 @@ async def run_telegram(config: dict[str, Any]) -> None:
         await state.clear()
         external_user_id = str(message.from_user.id)
         identity = service.logger.ensure_user("telegram", external_user_id)
-        response = service.handle_start(identity, "telegram")
+        context = {
+            "telegram_username": message.from_user.username or "",
+        }
+        response = service.handle_start(identity, "telegram", context)
 
         session_state: dict[str, Any] = {}
         store_identity(session_state, identity)
+        _sync_profile(service, identity, session_state)
         apply_response(session_state, response)
         await state.update_data(**session_state)
-        await state.set_state(Flow.start)
+        await state.set_state(_state_for_screen(response.screen))
         await _send_response(message, state)
 
     @dp.message(Flow.start)
@@ -98,7 +138,46 @@ async def run_telegram(config: dict[str, Any]) -> None:
             registration_date=reg_date,
         )
         await state.update_data(**data)
-        await state.set_state(Flow.main_menu)
+        await state.set_state(_state_for_screen(response.screen))
+        await _send_response(message, state)
+
+    @dp.message(Flow.name_confirm)
+    async def on_name_confirm(message: Message, state: FSMContext) -> None:
+        data = await state.get_data()
+        identity = _identity_from_data(data)
+        text = (message.text or "").strip()
+        payload = build_payload(
+            user_name=data.get("user_name"),
+            registration_date=data.get("registration_date"),
+            text=text,
+            screen=Screen.NAME_CONFIRM,
+        )
+
+        if text == CONFIRM_NAME_BUTTON:
+            action = ACTION_NAME_CONFIRMED
+        elif text == CHANGE_NAME_BUTTON:
+            action = ACTION_NAME_CHANGE
+        else:
+            action = ACTION_NAME_ENTERED
+            payload = build_payload(text=text)
+
+        response = service.handle_action(identity, "telegram", action, payload)
+
+        reg_name = None
+        reg_date = None
+        if response.screen == Screen.MAIN_MENU:
+            _sync_profile(service, identity, data)
+            reg_name = data.get("user_name")
+            reg_date = data.get("registration_date")
+
+        apply_response(
+            data,
+            response,
+            user_name=reg_name,
+            registration_date=reg_date,
+        )
+        await state.update_data(**data)
+        await state.set_state(_state_for_screen(response.screen))
         await _send_response(message, state)
 
     @dp.message(Flow.main_menu, F.text)

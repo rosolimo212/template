@@ -30,6 +30,7 @@ class Screen(str, Enum):
     """Экраны пользовательского сценария MVP."""
 
     START = "start"
+    NAME_CONFIRM = "name_confirm"
     MAIN_MENU = "main_menu"
     OPTION_1 = "option_1"
     OPTION_2 = "option_2"
@@ -39,6 +40,8 @@ class Screen(str, Enum):
 
 # Действия, которые UI передаёт в AppService.handle_action
 ACTION_NAME_ENTERED = "name_entered"
+ACTION_NAME_CONFIRMED = "name_confirmed"
+ACTION_NAME_CHANGE = "name_change"
 ACTION_OPTION_1 = "option_1"
 ACTION_OPTION_2 = "option_2"
 ACTION_OPTION_3 = "option_3"

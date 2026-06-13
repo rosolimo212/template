@@ -118,6 +118,15 @@ class MemoryLogger:
             }
         )
 
+    def get_user_profile(self, identity: UserIdentity) -> dict[str, Any] | None:
+        row = self.users.get(identity.user_id)
+        if row is None:
+            return None
+        return {
+            "user_name": str(row.get("user_name", "")),
+            "registration_date": row.get("registration_date"),
+        }
+
 
 def _make_service(logger: MemoryLogger | None = None) -> tuple[AppService, MemoryLogger]:
     log = logger or MemoryLogger()

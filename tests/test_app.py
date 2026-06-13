@@ -82,6 +82,15 @@ class FakeLogger(EventLogger):
             }
         )
 
+    def get_user_profile(self, identity: UserIdentity) -> dict[str, Any] | None:
+        row = self.users.get(identity.user_id)
+        if row is None:
+            return None
+        return {
+            "user_name": str(row.get("user_name", "")),
+            "registration_date": row.get("registration_date"),
+        }
+
 
 def _make_service() -> tuple[AppService, FakeLogger]:
     logger = FakeLogger()
@@ -169,6 +178,57 @@ def test_ensure_user_same_external_reuses_internal() -> None:
     b = logger.ensure_user("streamlit", "session-abc")
     assert a.internal_user_id == b.internal_user_id
     assert a.user_id == b.user_id
+
+
+def test_telegram_username_auto_register() -> None:
+    service, logger = _make_service()
+    identity = logger.ensure_user("telegram", "777")
+    resp = service.handle_start(
+        identity,
+        "telegram",
+        {"telegram_username": "roman_dev"},
+    )
+    assert resp.screen == Screen.NAME_CONFIRM
+    assert "roman_dev" in resp.text
+    assert logger.users[identity.user_id]["user_name"] == "roman_dev"
+    reg_events = [e for e in logger.events if e["event_name"] == "registration"]
+    assert len(reg_events) == 1
+    assert reg_events[0]["event_parameters"]["source"] == "telegram_username"
+
+
+def test_telegram_username_confirm_goes_to_menu() -> None:
+    from core.models import ACTION_NAME_CONFIRMED
+
+    service, logger = _make_service()
+    identity = logger.ensure_user("telegram", "778")
+    service.handle_start(identity, "telegram", {"telegram_username": "nick"})
+    resp = service.handle_action(
+        identity,
+        "telegram",
+        ACTION_NAME_CONFIRMED,
+        {"user_name": "nick"},
+    )
+    assert resp.screen == Screen.MAIN_MENU
+    assert "nick" in resp.text
+
+
+def test_telegram_no_username_asks_name() -> None:
+    service, logger = _make_service()
+    identity = logger.ensure_user("telegram", "779")
+    resp = service.handle_start(identity, "telegram", {"telegram_username": ""})
+    assert resp.screen == Screen.START
+    assert "зовут" in resp.text.lower()
+
+
+def test_returning_telegram_user_skips_registration() -> None:
+    service, logger = _make_service()
+    identity = logger.ensure_user("telegram", "780")
+    service.handle_action(
+        identity, "telegram", ACTION_NAME_ENTERED, {"text": "Анна"}
+    )
+    resp = service.handle_start(identity, "telegram", {"telegram_username": "anna"})
+    assert resp.screen == Screen.MAIN_MENU
+    assert "Анна" in resp.text
 
 
 def test_empty_name_not_registered() -> None:

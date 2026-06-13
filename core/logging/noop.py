@@ -93,3 +93,12 @@ class NoopLogger(EventLogger):
         timestamp: datetime | None = None,
     ) -> None:
         _ = (identity, event_name, channel, event_parameters, timestamp)
+
+    def get_user_profile(self, identity: UserIdentity) -> dict[str, Any] | None:
+        row = self._known_users.get(identity.user_id)
+        if row is None:
+            return None
+        return {
+            "user_name": row.get("user_name", ""),
+            "registration_date": row.get("registration_date"),
+        }
