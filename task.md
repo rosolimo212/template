@@ -139,3 +139,11 @@ event_name для логирования:
 - лаг в стримлит меньше 8 секунд
 
 
+Запуск тестов
+cd /home/roman/python/kotelok/template
+./pre_commit_check.sh
+
+Запуск стримлита
+streamlit run ui/streamlit_app.py
+
+

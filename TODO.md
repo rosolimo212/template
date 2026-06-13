@@ -26,3 +26,6 @@
 ## Фаза 6 — тесты
 - [x] Расширить `business_checks.py` по task.md
 - [x] Спецсимволы, логирование событий, upsert users
+
+cd /home/roman/python/kotelok/template
+./pre_commit_check.sh
