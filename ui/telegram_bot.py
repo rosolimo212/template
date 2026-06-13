@@ -1,16 +1,5 @@
 # coding: utf-8
-"""
-Telegram-клиент на aiogram 3.
-
-Цель:
-    Тонкий адаптер над AppService; telegram не обязателен для работы системы.
-
-Вход:
-    config с telegram.token.
-
-Выход:
-    Полный сценарий MVP в telegram.
-"""
+"""Telegram-клиент на aiogram 3."""
 
 from __future__ import annotations
 
@@ -30,27 +19,23 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import KeyboardButton, Message, ReplyKeyboardMarkup
 
-from core.models import ACTION_DIARY_TEXT, ACTION_NAME_ENTERED, Screen
+from core.models import ACTION_DIARY_TEXT, ACTION_NAME_ENTERED, Screen, UserIdentity
 from ui.base import build_app_service
-from ui.helpers import apply_response, build_payload
+from ui.helpers import apply_response, build_payload, store_identity
 
 
 class Flow(StatesGroup):
-    """Состояния пользователя в telegram."""
-
     start = State()
     main_menu = State()
     diary = State()
 
 
 def _make_keyboard(buttons: list[str]) -> ReplyKeyboardMarkup:
-    """Reply-клавиатура из списка подписей."""
     rows = [[KeyboardButton(text=label)] for label in buttons]
     return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True)
 
 
 async def _send_response(message: Message, state: FSMContext) -> None:
-    """Отправляет пользователю последний текст и клавиатуру из FSM data."""
     data = await state.get_data()
     text = data.get("last_text", "")
     buttons = data.get("buttons", [])
@@ -58,12 +43,15 @@ async def _send_response(message: Message, state: FSMContext) -> None:
     await message.answer(text, reply_markup=markup)
 
 
-async def run_telegram(config: dict[str, Any]) -> None:
-    """
-    Запускает telegram-бота.
+def _identity_from_data(data: dict[str, Any]) -> UserIdentity:
+    return UserIdentity(
+        user_id=data["user_id"],
+        internal_user_id=int(data["internal_user_id"]),
+        external_user_id=data["external_user_id"],
+    )
 
-    :param config: конфиг из config.yaml
-    """
+
+async def run_telegram(config: dict[str, Any]) -> None:
     token = config["telegram"]["token"]
     service = build_app_service(config)
 
@@ -73,10 +61,12 @@ async def run_telegram(config: dict[str, Any]) -> None:
     @dp.message(CommandStart())
     async def cmd_start(message: Message, state: FSMContext) -> None:
         await state.clear()
-        user_id = service.logger.allocate_user_id()
-        response = service.handle_start(user_id, "telegram")
+        external_user_id = str(message.from_user.id)
+        identity = service.logger.ensure_user("telegram", external_user_id)
+        response = service.handle_start(identity, "telegram")
 
-        session_state: dict[str, Any] = {"user_id": user_id}
+        session_state: dict[str, Any] = {}
+        store_identity(session_state, identity)
         apply_response(session_state, response)
         await state.update_data(**session_state)
         await state.set_state(Flow.start)
@@ -85,11 +75,11 @@ async def run_telegram(config: dict[str, Any]) -> None:
     @dp.message(Flow.start)
     async def on_start_screen(message: Message, state: FSMContext) -> None:
         data = await state.get_data()
-        user_id = data["user_id"]
+        identity = _identity_from_data(data)
         user_name = (message.text or "").strip()
 
         response = service.handle_action(
-            user_id,
+            identity,
             "telegram",
             ACTION_NAME_ENTERED,
             build_payload(text=user_name),
@@ -114,11 +104,11 @@ async def run_telegram(config: dict[str, Any]) -> None:
     @dp.message(Flow.main_menu, F.text)
     async def on_main_menu(message: Message, state: FSMContext) -> None:
         data = await state.get_data()
-        user_id = data["user_id"]
+        identity = _identity_from_data(data)
         text = message.text or ""
 
         response = service.handle_action(
-            user_id,
+            identity,
             "telegram",
             "raw",
             {
@@ -142,12 +132,12 @@ async def run_telegram(config: dict[str, Any]) -> None:
     @dp.message(Flow.diary, F.text)
     async def on_diary(message: Message, state: FSMContext) -> None:
         data = await state.get_data()
-        user_id = data["user_id"]
+        identity = _identity_from_data(data)
         text = message.text or ""
 
         if text.strip().casefold() == "в главное меню":
             response = service.handle_action(
-                user_id,
+                identity,
                 "telegram",
                 "raw",
                 {
@@ -160,7 +150,7 @@ async def run_telegram(config: dict[str, Any]) -> None:
             )
         else:
             response = service.handle_action(
-                user_id,
+                identity,
                 "telegram",
                 ACTION_DIARY_TEXT,
                 {

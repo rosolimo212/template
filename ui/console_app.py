@@ -1,10 +1,5 @@
 # coding: utf-8
-"""
-Консольный клиент для отладки ядра без браузера и telegram.
-
-Цель:
-    Полный цикл MVP через input/print.
-"""
+"""Консольный клиент."""
 
 from __future__ import annotations
 
@@ -19,7 +14,12 @@ if str(ROOT) not in sys.path:
 
 from core.models import ACTION_DIARY_TEXT, ACTION_NAME_ENTERED, Screen
 from ui.base import build_app_service
-from ui.helpers import apply_response, build_payload
+from ui.helpers import (
+    apply_response,
+    build_payload,
+    get_identity,
+    init_user_identity,
+)
 
 
 def _print_response(state: dict[str, Any]) -> None:
@@ -29,32 +29,29 @@ def _print_response(state: dict[str, Any]) -> None:
 
 
 def run_console(config: dict[str, Any]) -> None:
-    """
-    Консольный цикл MVP.
-
-    :param config: конфиг из config.yaml
-    """
     service = build_app_service(config)
-    state: dict[str, Any] = {
-        "user_id": service.logger.allocate_user_id(),
-    }
+    state: dict[str, Any] = {}
 
-    response = service.handle_start(state["user_id"], "console")
+    identity = init_user_identity(service, state, "console")
+    response = service.handle_start(identity, "console")
     apply_response(state, response)
 
     print("=== Template console ===")
-    print(f"user_id: {state['user_id']}")
+    print(f"user_id (hash): {state['user_id']}")
+    print(f"internal_user_id: {state['internal_user_id']}")
+    print(f"external_user_id: {state['external_user_id']}")
     _print_response(state)
 
     while True:
         screen = state.get("screen", Screen.START.value)
+        identity = get_identity(state)
 
         if screen == Screen.START.value:
             text = input("> ").strip()
             if text.lower() in ("exit", "quit", "выход"):
                 break
             response = service.handle_action(
-                state["user_id"],
+                identity,
                 "console",
                 ACTION_NAME_ENTERED,
                 build_payload(text=text),
@@ -79,7 +76,7 @@ def run_console(config: dict[str, Any]) -> None:
             if text.lower() in ("exit", "quit", "выход"):
                 break
             response = service.handle_action(
-                state["user_id"],
+                identity,
                 "console",
                 ACTION_DIARY_TEXT,
                 {
@@ -116,7 +113,7 @@ def run_console(config: dict[str, Any]) -> None:
             text = choice
 
         response = service.handle_action(
-            state["user_id"],
+            identity,
             "console",
             "raw",
             {

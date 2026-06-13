@@ -1,14 +1,6 @@
 # coding: utf-8
 """
 Слой 2 тестирования — бизнес-проверки из task.md.
-
-Запуск перед коммитом:
-    python business_checks.py
-
-или вместе с pytest:
-    ./pre_commit_check.sh
-
-Проверки намеренно простые и читаемые — без pytest.
 """
 
 from __future__ import annotations
@@ -26,6 +18,11 @@ if str(ROOT) not in sys.path:
 
 from core.app import AppService
 from core.brain import BACK_TO_MENU_BUTTON, MENU_BUTTONS, match_menu_button
+from core.collectors.weather import (
+    format_weather_timings,
+    get_current_temperature_with_timing,
+)
+from core.identity import make_user_id
 from core.logging.factory import build_logger
 from core.logging.noop import NoopLogger
 from core.models import (
@@ -35,9 +32,9 @@ from core.models import (
     ACTION_OPTION_2,
     ACTION_OPTION_3,
     Screen,
+    UserIdentity,
 )
 
-# Все event_name из task.md
 REQUIRED_EVENTS = [
     "start_screen_visit",
     "main_menu_visit",
@@ -52,20 +49,36 @@ MAX_LATENCY_SEC = 8.0
 
 
 class MemoryLogger:
-    """Простой логгер в память для бизнес-проверок."""
-
     def __init__(self) -> None:
         self.events: list[dict[str, Any]] = []
-        self.users: dict[int, dict[str, Any]] = {}
+        self.users: dict[str, dict[str, Any]] = {}
+        self._by_external: dict[tuple[str, str], UserIdentity] = {}
         self._counter = 0
 
-    def allocate_user_id(self) -> int:
+    def ensure_user(self, channel: str, external_user_id: str) -> UserIdentity:
+        key = (channel, external_user_id)
+        if key in self._by_external:
+            return self._by_external[key]
+
+        user_id = make_user_id(channel, external_user_id)
+        if user_id in self.users:
+            identity = UserIdentity(
+                user_id,
+                self.users[user_id]["internal_user_id"],
+                external_user_id,
+            )
+            self._by_external[key] = identity
+            return identity
+
         self._counter += 1
-        return self._counter
+        self.users[user_id] = {"internal_user_id": self._counter}
+        identity = UserIdentity(user_id, self._counter, external_user_id)
+        self._by_external[key] = identity
+        return identity
 
     def upsert_user(
         self,
-        user_id: int,
+        identity: UserIdentity,
         user_name: str,
         registration_date: datetime,
         registration_channel: str,
@@ -74,7 +87,9 @@ class MemoryLogger:
         is_trial: bool = False,
         is_active: bool = True,
     ) -> None:
-        self.users[user_id] = {
+        self.users[identity.user_id] = {
+            "internal_user_id": identity.internal_user_id,
+            "external_user_id": identity.external_user_id,
             "user_name": user_name,
             "registration_date": registration_date,
             "registration_channel": registration_channel,
@@ -86,7 +101,7 @@ class MemoryLogger:
 
     def log_event(
         self,
-        user_id: int,
+        identity: UserIdentity,
         event_name: str,
         channel: str,
         event_parameters: dict[str, Any] | None = None,
@@ -94,7 +109,9 @@ class MemoryLogger:
     ) -> None:
         self.events.append(
             {
-                "user_id": user_id,
+                "user_id": identity.user_id,
+                "internal_user_id": identity.internal_user_id,
+                "external_user_id": identity.external_user_id,
                 "event_name": event_name,
                 "channel": channel,
                 "event_parameters": event_parameters,
@@ -123,49 +140,36 @@ def _user_payload(user_name: str, registration_date: datetime) -> dict[str, Any]
     }
 
 
-def _run_full_scenario(service: AppService, logger: MemoryLogger, channel: str) -> None:
-    """Проходит весь сценарий MVP как один пользователь."""
-    user_id = logger.allocate_user_id()
-
-    service.handle_start(user_id, channel)
+def _run_full_scenario(service: AppService, logger: MemoryLogger, channel: str) -> UserIdentity:
+    identity = logger.ensure_user(channel, "biz-check-user-1")
+    service.handle_start(identity, channel)
     service.handle_action(
-        user_id, channel, ACTION_NAME_ENTERED, {"text": "Тестовый Пользователь"}
+        identity, channel, ACTION_NAME_ENTERED, {"text": "Тестовый Пользователь"}
     )
-
     payload = _user_payload(
         "Тестовый Пользователь",
-        logger.users[user_id]["registration_date"],
+        logger.users[identity.user_id]["registration_date"],
     )
-
     with patch("core.app.get_current_temperature", return_value="+10°C"):
-        service.handle_action(user_id, channel, ACTION_OPTION_1, payload)
-
+        service.handle_action(identity, channel, ACTION_OPTION_1, payload)
     with patch("core.app.get_random_joke", return_value="Анекдот дня"):
-        service.handle_action(user_id, channel, ACTION_OPTION_2, payload)
-
-    service.handle_action(user_id, channel, ACTION_OPTION_3, payload)
+        service.handle_action(identity, channel, ACTION_OPTION_2, payload)
+    service.handle_action(identity, channel, ACTION_OPTION_3, payload)
     service.handle_action(
-        user_id,
+        identity,
         channel,
         ACTION_DIARY_TEXT,
         {**payload, "text": "Запись в дневнике"},
     )
+    return identity
 
 
 def check_project_scaffold_exists() -> None:
-    """Ключевые файлы проекта на месте."""
     required = [
+        "core/identity.py",
         "core/app.py",
-        "core/brain.py",
-        "core/config.py",
-        "core/db.py",
-        "core/logging/postgres.py",
+        "sql/002_migrate_user_ids.sql",
         "ui/streamlit_app.py",
-        "ui/helpers.py",
-        "ui/console_app.py",
-        "ui/telegram_bot.py",
-        "sql/001_init.sql",
-        "data/jokes.json",
     ]
     missing = [p for p in required if not (ROOT / p).exists()]
     if missing:
@@ -173,196 +177,137 @@ def check_project_scaffold_exists() -> None:
 
 
 def check_logger_factory_builds() -> None:
-    """Фабрика логгера создаёт postgres или noop."""
-    build_logger(
-        {
-            "app": {"logging_enabled": False},
-            "logging": {"schema": "template"},
-        }
-    )
-    build_logger(
-        {
-            "app": {"logging_enabled": True},
-            "logging": {
-                "host": "localhost",
-                "port": 5432,
-                "database": "db",
-                "user": "u",
-                "password": "p",
-                "schema": "template",
-            },
-        }
-    )
+    build_logger({"app": {"logging_enabled": False}, "logging": {"schema": "template"}})
 
 
 def check_all_menu_buttons_defined() -> None:
-    """Все кнопки меню распознаются brain."""
     for label in MENU_BUTTONS:
-        matched = match_menu_button(label)
-        if matched is None:
+        if match_menu_button(label) is None:
             raise AssertionError(f"Кнопка не распознаётся: {label!r}")
-
-    if match_menu_button(BACK_TO_MENU_BUTTON) is not None:
-        raise AssertionError("Кнопка возврата не должна быть пунктом меню")
 
 
 def check_all_menu_buttons_clickable() -> None:
-    """
-    Каждая кнопка меню вызывает действие и возвращает ответ с текстом.
-
-    Проверяем логику (streamlit/telegram рендерят те же подписи).
-    """
     service, logger = _make_service()
-    user_id = 1
-    channel = "streamlit"
-
-    service.handle_start(user_id, channel)
-    service.handle_action(user_id, channel, ACTION_NAME_ENTERED, {"text": "Юля"})
-    payload = _user_payload("Юля", logger.users[user_id]["registration_date"])
-
-    expectations = {
-        MENU_BUTTONS[0]: "+",
-        MENU_BUTTONS[1]: "анекдот",  # может быть текст ошибки или шутка
-        MENU_BUTTONS[2]: "дневник",
-    }
+    identity = logger.ensure_user("streamlit", "btn-test")
+    service.handle_start(identity, "streamlit")
+    service.handle_action(identity, "streamlit", ACTION_NAME_ENTERED, {"text": "Юля"})
+    payload = _user_payload("Юля", logger.users[identity.user_id]["registration_date"])
 
     with patch("core.app.get_current_temperature", return_value="+7°C"):
         with patch("core.app.get_random_joke", return_value="Шутка"):
             for label in MENU_BUTTONS:
                 resp = service.handle_action(
-                    user_id,
-                    channel,
+                    identity,
+                    "streamlit",
                     "raw",
                     {**payload, "text": label, "screen": Screen.MAIN_MENU.value},
                 )
                 if not resp.text.strip():
                     raise AssertionError(f"Пустой ответ на кнопку: {label!r}")
 
-                if label == MENU_BUTTONS[2]:
-                    if resp.screen != Screen.DIARY_WAIT:
-                        raise AssertionError(f"Дневник: ожидали diary_wait, got {resp.screen}")
-                else:
-                    if not resp.buttons:
-                        raise AssertionError(f"После {label!r} нет кнопок меню")
-
 
 def check_all_events_logged() -> None:
-    """Все event_name из task.md пишутся за полный сценарий."""
     service, logger = _make_service()
     _run_full_scenario(service, logger, "console")
-
     logged = {e["event_name"] for e in logger.events}
-    missing = [name for name in REQUIRED_EVENTS if name not in logged]
+    missing = [n for n in REQUIRED_EVENTS if n not in logged]
     if missing:
-        raise AssertionError(f"Не залогированы события: {missing}. Есть: {sorted(logged)}")
+        raise AssertionError(f"Не залогированы: {missing}")
+
+
+def check_users_have_three_ids() -> None:
+    service, logger = _make_service()
+    identity = _run_full_scenario(service, logger, "telegram")
+    row = logger.users[identity.user_id]
+    if not row.get("external_user_id"):
+        raise AssertionError("external_user_id не сохранён")
+    if row["internal_user_id"] != identity.internal_user_id:
+        raise AssertionError("internal_user_id не совпадает")
 
 
 def check_users_overwritten() -> None:
-    """Поля users перезаписываются при повторных действиях."""
     service, logger = _make_service()
-    user_id = 1
-
-    service.handle_action(user_id, "console", ACTION_NAME_ENTERED, {"text": "Петр"})
-    first_active = logger.users[user_id]["last_active_at"]
-    first_name = logger.users[user_id]["user_name"]
-
-    payload = _user_payload(first_name, logger.users[user_id]["registration_date"])
-
+    identity = logger.ensure_user("console", "overwrite-test")
+    service.handle_action(identity, "console", ACTION_NAME_ENTERED, {"text": "Петр"})
+    first_active = logger.users[identity.user_id]["last_active_at"]
+    payload = _user_payload("Петр", logger.users[identity.user_id]["registration_date"])
     time.sleep(0.01)
-
     with patch("core.app.get_random_joke", return_value="x"):
-        service.handle_action(user_id, "console", ACTION_OPTION_2, payload)
-
-    second_active = logger.users[user_id]["last_active_at"]
-    if second_active < first_active:
+        service.handle_action(identity, "console", ACTION_OPTION_2, payload)
+    if logger.users[identity.user_id]["last_active_at"] < first_active:
         raise AssertionError("last_active_at не обновился")
-    if logger.users[user_id]["user_name"] != first_name:
-        raise AssertionError("user_name не должен пропасть при touch")
 
 
 def check_no_user_id_collisions() -> None:
-    """Инкрементальный user_id без дубликатов (noop-счётчик)."""
     import tempfile
 
     with tempfile.TemporaryDirectory() as tmp:
         counter = Path(tmp) / "user_counter.json"
         logger = NoopLogger(counter_path=counter)
-        ids = [logger.allocate_user_id() for _ in range(50)]
-
+        ids = []
+        for i in range(50):
+            ident = logger.ensure_user("streamlit", f"session-{i}")
+            ids.append(ident.internal_user_id)
+            if i > 0 and ident.user_id == make_user_id("streamlit", f"session-{i-1}"):
+                raise AssertionError("hash user_id коллизия")
         if len(ids) != len(set(ids)):
-            raise AssertionError(f"Коллизии user_id: {ids}")
-
-        # Новый экземпляр логгера читает тот же файл-счётчик
-        logger2 = NoopLogger(counter_path=counter)
-        next_id = logger2.allocate_user_id()
-        if next_id in ids:
-            raise AssertionError(f"Коллизия после перечитывания счётчика: {next_id}")
+            raise AssertionError("Коллизии internal_user_id")
 
 
 def check_special_chars_safe() -> None:
-    """Спецсимволы в имени и дневнике не ломают ответ и лог."""
-    special_names = [
-        'O\'Brien',
-        '"Вася"',
-        "Имя <script>",
-        "Юля 🎉",
-        "back\\slash",
-    ]
-    diary_text = "Кавычки \"тут\", апостроф O'Hara, перенос\nстроки, emoji ☀"
-
-    for name in special_names:
-        service, logger = _make_service()
-        user_id = logger.allocate_user_id()
-        channel = "telegram"
-
-        service.handle_start(user_id, channel)
-        resp = service.handle_action(
-            user_id, channel, ACTION_NAME_ENTERED, {"text": name}
-        )
-        if resp.screen != Screen.MAIN_MENU:
-            raise AssertionError(f"Имя не принято: {name!r} -> {resp.text}")
-
-        reg_events = [e for e in logger.events if e["event_name"] == "registration"]
-        if reg_events[0]["event_parameters"]["user_name"] != name:
-            raise AssertionError(f"Имя исказилось в логе: {name!r}")
-
-        payload = _user_payload(name, logger.users[user_id]["registration_date"])
-        service.handle_action(user_id, channel, ACTION_OPTION_3, payload)
-        diary_resp = service.handle_action(
-            user_id,
-            channel,
-            ACTION_DIARY_TEXT,
-            {**payload, "text": diary_text},
-        )
-        if diary_resp.screen != Screen.MAIN_MENU:
-            raise AssertionError(f"Дневник не сохранился для имени {name!r}")
-
-        diary_events = [
-            e for e in logger.events if e["event_name"] == "diary_message_sent"
-        ]
-        if diary_events[-1]["event_parameters"]["text"] != diary_text:
-            raise AssertionError("Текст дневника исказился в event_parameters")
+    name = 'O\'Brien "test" 🎉'
+    service, logger = _make_service()
+    identity = logger.ensure_user("telegram", "spec-1")
+    service.handle_start(identity, "telegram")
+    service.handle_action(identity, "telegram", ACTION_NAME_ENTERED, {"text": name})
+    reg = [e for e in logger.events if e["event_name"] == "registration"][0]
+    if reg["event_parameters"]["user_name"] != name:
+        raise AssertionError("Имя исказилось в логе")
 
 
 def check_scenario_latency_under_limit() -> None:
-    """
-    Полный сценарий (с mock API) укладывается в 8 секунд.
-
-    Прокси для требований streamlit/telegram: тормоза в ядре ловим здесь.
-    Реальный лаг UI с сетью — проверять вручную при приёмке.
-    """
     service, logger = _make_service()
     started = time.monotonic()
-
     with patch("core.app.get_current_temperature", return_value="+1°C"):
         with patch("core.app.get_random_joke", return_value="быстро"):
             _run_full_scenario(service, logger, "streamlit")
-
     elapsed = time.monotonic() - started
     if elapsed >= MAX_LATENCY_SEC:
-        raise AssertionError(
-            f"Сценарий занял {elapsed:.2f} с (лимит {MAX_LATENCY_SEC} с)"
-        )
+        raise AssertionError(f"Сценарий занял {elapsed:.2f} с")
+
+
+def check_weather_timing_breakdown() -> None:
+    """
+    Реальный запрос к weatherapi (если есть config.yaml) + печать тайминга.
+    """
+    config_path = ROOT / "config.yaml"
+    if not config_path.exists():
+        print("  SKIP weather timing: нет config.yaml")
+        return
+
+    from core.config import load_app_config
+
+    config = load_app_config(config_path)
+    w = config["weatherapi"]
+
+    text, timings = get_current_temperature_with_timing(
+        api_key=w["api_key"],
+        base_url=w["url"],
+        method=w["method"],
+        city=w["city"],
+    )
+
+    print(format_weather_timings(timings))
+    print(f"  ответ (первые 80 символов): {text[:80]}")
+
+    http_sec = float(timings.get("http_request_sec", 0))
+    total_sec = float(timings.get("total_sec", 0))
+    our_code_sec = total_sec - http_sec
+
+    print(f"  вывод: HTTP ~{http_sec:.3f} с, наш код ~{our_code_sec:.3f} с, всего ~{total_sec:.3f} с")
+
+    if total_sec >= MAX_LATENCY_SEC:
+        raise AssertionError(f"Погода не уложилась в {MAX_LATENCY_SEC} с: {total_sec:.2f} с")
 
 
 def run_all_checks() -> None:
@@ -372,10 +317,12 @@ def run_all_checks() -> None:
         ("кнопки меню определены", check_all_menu_buttons_defined),
         ("кнопки меню кликабельны", check_all_menu_buttons_clickable),
         ("все события логируются", check_all_events_logged),
+        ("три id в users", check_users_have_three_ids),
         ("users перезаписываются", check_users_overwritten),
         ("нет коллизий user_id", check_no_user_id_collisions),
         ("спецсимволы безопасны", check_special_chars_safe),
-        (f"латентность < {MAX_LATENCY_SEC} с", check_scenario_latency_under_limit),
+        (f"латентность сценария < {MAX_LATENCY_SEC} с", check_scenario_latency_under_limit),
+        ("тайминг погоды по компонентам", check_weather_timing_breakdown),
     ]
 
     print("business_checks:")

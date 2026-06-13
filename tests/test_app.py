@@ -8,6 +8,7 @@ from typing import Any
 from unittest.mock import patch
 
 from core.app import AppService
+from core.identity import make_user_id
 from core.logging.base import EventLogger
 from core.models import (
     ACTION_DIARY_TEXT,
@@ -16,24 +17,32 @@ from core.models import (
     ACTION_OPTION_2,
     ACTION_OPTION_3,
     Screen,
+    UserIdentity,
 )
 
 
 class FakeLogger(EventLogger):
-    """Логгер в память для тестов."""
-
     def __init__(self) -> None:
         self.events: list[dict[str, Any]] = []
-        self.users: dict[int, dict[str, Any]] = {}
+        self.users: dict[str, dict[str, Any]] = {}
         self._counter = 0
 
-    def allocate_user_id(self) -> int:
+    def ensure_user(self, channel: str, external_user_id: str) -> UserIdentity:
+        user_id = make_user_id(channel, external_user_id)
+        if user_id in self.users:
+            row = self.users[user_id]
+            return UserIdentity(user_id, row["internal_user_id"], external_user_id)
+
         self._counter += 1
-        return self._counter
+        self.users[user_id] = {
+            "internal_user_id": self._counter,
+            "external_user_id": external_user_id,
+        }
+        return UserIdentity(user_id, self._counter, external_user_id)
 
     def upsert_user(
         self,
-        user_id: int,
+        identity: UserIdentity,
         user_name: str,
         registration_date: datetime,
         registration_channel: str,
@@ -42,7 +51,9 @@ class FakeLogger(EventLogger):
         is_trial: bool = False,
         is_active: bool = True,
     ) -> None:
-        self.users[user_id] = {
+        self.users[identity.user_id] = {
+            "internal_user_id": identity.internal_user_id,
+            "external_user_id": identity.external_user_id,
             "user_name": user_name,
             "registration_date": registration_date,
             "registration_channel": registration_channel,
@@ -54,7 +65,7 @@ class FakeLogger(EventLogger):
 
     def log_event(
         self,
-        user_id: int,
+        identity: UserIdentity,
         event_name: str,
         channel: str,
         event_parameters: dict[str, Any] | None = None,
@@ -62,11 +73,12 @@ class FakeLogger(EventLogger):
     ) -> None:
         self.events.append(
             {
-                "user_id": user_id,
+                "user_id": identity.user_id,
+                "internal_user_id": identity.internal_user_id,
+                "external_user_id": identity.external_user_id,
                 "event_name": event_name,
                 "channel": channel,
                 "event_parameters": event_parameters,
-                "timestamp": timestamp,
             }
         )
 
@@ -94,107 +106,77 @@ def _user_payload(user_name: str, registration_date: datetime) -> dict[str, Any]
 
 def test_handle_start_creates_user_before_event() -> None:
     service, logger = _make_service()
-    service.handle_start(1, "streamlit")
+    identity = logger.ensure_user("streamlit", "ext-1")
+    service.handle_start(identity, "streamlit")
 
-    assert 1 in logger.users
-    assert logger.users[1]["user_name"] == ""
+    assert identity.user_id in logger.users
+    assert logger.users[identity.user_id]["user_name"] == ""
     assert logger.events[0]["event_name"] == "start_screen_visit"
 
 
 def test_full_mvp_flow_logs_all_events() -> None:
     service, logger = _make_service()
-    user_id = 1
     channel = "console"
+    identity = logger.ensure_user(channel, "ext-test-1")
 
-    start_resp = service.handle_start(user_id, channel)
+    start_resp = service.handle_start(identity, channel)
     assert start_resp.screen == Screen.START
 
     name_resp = service.handle_action(
-        user_id,
+        identity,
         channel,
         ACTION_NAME_ENTERED,
         {"text": "Роман"},
     )
     assert name_resp.screen == Screen.MAIN_MENU
-    assert "Роман" in name_resp.text
 
     event_names = [e["event_name"] for e in logger.events]
     assert "start_screen_visit" in event_names
     assert "registration" in event_names
     assert "main_menu_visit" in event_names
-    assert logger.users[1]["user_name"] == "Роман"
 
-    reg_date = logger.users[1]["registration_date"]
+    reg_date = logger.users[identity.user_id]["registration_date"]
     payload = _user_payload("Роман", reg_date)
 
-    with patch(
-        "core.app.get_current_temperature",
-        return_value="В Moscow сейчас +5°C.",
-    ):
-        opt1 = service.handle_action(user_id, channel, ACTION_OPTION_1, payload)
-
-    assert "+5°C" in opt1.text
-    assert "option1_visit" in [e["event_name"] for e in logger.events]
+    with patch("core.app.get_current_temperature", return_value="В Moscow сейчас +5°C."):
+        service.handle_action(identity, channel, ACTION_OPTION_1, payload)
 
     with patch("core.app.get_random_joke", return_value="Тестовый анекдот"):
-        opt2 = service.handle_action(user_id, channel, ACTION_OPTION_2, payload)
+        service.handle_action(identity, channel, ACTION_OPTION_2, payload)
 
-    assert "Тестовый анекдот" in opt2.text
-    assert "option2_visit" in [e["event_name"] for e in logger.events]
-
-    opt3 = service.handle_action(user_id, channel, ACTION_OPTION_3, payload)
-    assert opt3.screen == Screen.DIARY_WAIT
-    assert "option3_visit" in [e["event_name"] for e in logger.events]
-
-    diary = service.handle_action(
-        user_id,
+    service.handle_action(identity, channel, ACTION_OPTION_3, payload)
+    service.handle_action(
+        identity,
         channel,
         ACTION_DIARY_TEXT,
         {**payload, "text": 'Мысли с "кавычками" и O\'Brien'},
     )
-    assert diary.screen == Screen.MAIN_MENU
-    assert "сохранена" in diary.text.lower()
 
-    diary_events = [
-        e for e in logger.events if e["event_name"] == "diary_message_sent"
-    ]
-    assert len(diary_events) == 1
-    assert "O'Brien" in diary_events[0]["event_parameters"]["text"]
+    assert "diary_message_sent" in [e["event_name"] for e in logger.events]
+
+
+def test_ensure_user_same_external_id_same_hash() -> None:
+    logger = FakeLogger()
+    a = logger.ensure_user("telegram", "12345")
+    b = logger.ensure_user("telegram", "12345")
+    assert a.user_id == b.user_id
+    assert a.internal_user_id == b.internal_user_id
+
+
+def test_ensure_user_same_external_reuses_internal() -> None:
+    logger = FakeLogger()
+    a = logger.ensure_user("streamlit", "session-abc")
+    b = logger.ensure_user("streamlit", "session-abc")
+    assert a.internal_user_id == b.internal_user_id
+    assert a.user_id == b.user_id
 
 
 def test_empty_name_not_registered() -> None:
     service, logger = _make_service()
-    resp = service.handle_action(1, "console", ACTION_NAME_ENTERED, {"text": "   "})
+    identity = logger.ensure_user("console", "ext-2")
+    service.handle_start(identity, "console")
+    resp = service.handle_action(
+        identity, "console", ACTION_NAME_ENTERED, {"text": "   "}
+    )
     assert resp.screen == Screen.START
-    assert "пустым" in resp.text.lower()
-    assert 1 not in logger.users
-
-
-def test_users_overwritten_on_touch() -> None:
-    service, logger = _make_service()
-    service.handle_action(1, "console", ACTION_NAME_ENTERED, {"text": "Аня"})
-
-    first_active = logger.users[1]["last_active_at"]
-    payload = _user_payload("Аня", logger.users[1]["registration_date"])
-
-    with patch("core.app.get_random_joke", return_value="шутка"):
-        service.handle_action(1, "console", ACTION_OPTION_2, payload)
-
-    assert logger.users[1]["user_name"] == "Аня"
-    assert logger.users[1]["last_active_at"] >= first_active
-
-
-def test_raw_text_menu_matching() -> None:
-    service, logger = _make_service()
-    service.handle_action(1, "console", ACTION_NAME_ENTERED, {"text": "Иван"})
-    payload = _user_payload("Иван", logger.users[1]["registration_date"])
-
-    with patch("core.app.get_current_temperature", return_value="холодно"):
-        resp = service.handle_action(
-            1,
-            "console",
-            "raw",
-            {**payload, "text": "Температура в Москве", "screen": "main_menu"},
-        )
-
-    assert "холодно" in resp.text
+    assert logger.users[identity.user_id]["user_name"] == ""

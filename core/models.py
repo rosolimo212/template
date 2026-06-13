@@ -17,6 +17,15 @@ from enum import Enum
 from typing import Any
 
 
+@dataclass(frozen=True)
+class UserIdentity:
+    """Тройка идентификаторов пользователя."""
+
+    user_id: str
+    internal_user_id: int
+    external_user_id: str
+
+
 class Screen(str, Enum):
     """Экраны пользовательского сценария MVP."""
 
@@ -41,7 +50,9 @@ ACTION_BACK_TO_MENU = "back_to_menu"
 class UserRecord:
     """Запись пользователя для таблицы template.users."""
 
-    user_id: int
+    user_id: str
+    internal_user_id: int
+    external_user_id: str
     user_name: str
     registration_date: datetime
     registration_channel: str
@@ -56,7 +67,9 @@ class EventRecord:
     """Запись события для таблицы template.events."""
 
     timestamp: datetime
-    user_id: int
+    user_id: str
+    internal_user_id: int
+    external_user_id: str
     event_name: str
     channel: str
     event_parameters: dict[str, Any] | None = None

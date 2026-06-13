@@ -8,7 +8,10 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from core.collectors.jokes import get_random_joke
-from core.collectors.weather import get_current_temperature
+from core.collectors.weather import (
+    get_current_temperature,
+    get_current_temperature_with_timing,
+)
 
 
 def test_get_random_joke_from_file(tmp_path: Path) -> None:
@@ -86,3 +89,23 @@ def test_get_current_temperature_special_chars_in_city() -> None:
 
     assert "O'Brien" in result
     assert "-3" in result
+
+
+def test_weather_timing_keys() -> None:
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "location": {"name": "Moscow"},
+        "current": {"temp_c": 1, "condition": {"text": "Clear"}},
+    }
+
+    with patch("core.collectors.weather.requests.get", return_value=mock_response):
+        _, timings = get_current_temperature_with_timing(
+            api_key="key",
+            base_url="http://api.weatherapi.com/v1",
+            method="/current.json",
+            city="Moscow",
+        )
+
+    assert "http_request_sec" in timings
+    assert "total_sec" in timings

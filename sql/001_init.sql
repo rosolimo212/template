@@ -1,10 +1,12 @@
--- Схема template: таблицы логирования для шаблона проекта.
--- Выполнить один раз на stage/prod базе от имени пользователя с правами CREATE.
+-- Схема template (актуальная версия для новых установок).
+-- Для уже существующей базы: sql/002_migrate_user_ids.sql
 
 CREATE SCHEMA IF NOT EXISTS template;
 
 CREATE TABLE IF NOT EXISTS template.users (
-    user_id BIGSERIAL PRIMARY KEY,
+    user_id TEXT PRIMARY KEY,
+    internal_user_id BIGSERIAL NOT NULL UNIQUE,
+    external_user_id TEXT NOT NULL,
     user_name TEXT NOT NULL,
     registration_date TIMESTAMP NOT NULL,
     registration_channel TEXT NOT NULL,
@@ -17,7 +19,9 @@ CREATE TABLE IF NOT EXISTS template.users (
 CREATE TABLE IF NOT EXISTS template.events (
     id BIGSERIAL PRIMARY KEY,
     timestamp TIMESTAMP NOT NULL,
-    user_id BIGINT NOT NULL REFERENCES template.users (user_id),
+    user_id TEXT NOT NULL REFERENCES template.users (user_id),
+    internal_user_id BIGINT NOT NULL,
+    external_user_id TEXT NOT NULL,
     event_name TEXT NOT NULL,
     channel TEXT NOT NULL,
     event_parameters JSONB,
@@ -25,4 +29,6 @@ CREATE TABLE IF NOT EXISTS template.events (
 );
 
 CREATE INDEX IF NOT EXISTS idx_events_user_id ON template.events (user_id);
+CREATE INDEX IF NOT EXISTS idx_events_internal_user_id ON template.events (internal_user_id);
 CREATE INDEX IF NOT EXISTS idx_events_event_name ON template.events (event_name);
+CREATE INDEX IF NOT EXISTS idx_users_external_user_id ON template.users (external_user_id);

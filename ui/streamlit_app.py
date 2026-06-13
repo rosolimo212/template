@@ -1,16 +1,5 @@
 # coding: utf-8
-"""
-Streamlit-клиент (тестовый браузерный интерфейс).
-
-Цель:
-    Тонкий адаптер над AppService для локального stage.
-
-Вход:
-    config из config.yaml.
-
-Выход:
-    Интерактивный браузерный сценарий MVP.
-"""
+"""Streamlit-клиент."""
 
 from __future__ import annotations
 
@@ -25,15 +14,23 @@ if str(ROOT) not in sys.path:
 
 from core.models import ACTION_DIARY_TEXT, ACTION_NAME_ENTERED, Screen
 from ui.base import build_app_service
-from ui.helpers import apply_response, build_payload
+from ui.helpers import (
+    apply_response,
+    build_payload,
+    get_identity,
+    init_user_identity,
+)
 
 
 def _init_session(service, state) -> None:
-    """Первый визит: user_id и стартовый экран."""
-    state.user_id = service.logger.allocate_user_id()
-    response = service.handle_start(state.user_id, "streamlit")
+    # Streamlit иногда гоняет скрипт дважды — флаг ставим сразу
+    if state.get("initialized"):
+        return
+    state["initialized"] = True
+
+    identity = init_user_identity(service, state, "streamlit")
+    response = service.handle_start(identity, "streamlit")
     apply_response(state, response)
-    state.initialized = True
 
 
 def _registered_payload(state) -> dict[str, Any]:
@@ -44,12 +41,12 @@ def _registered_payload(state) -> dict[str, Any]:
 
 
 def _handle_user_input(service, state, text: str) -> None:
-    """Отправляет ввод пользователя в AppService."""
+    identity = get_identity(state)
     screen = getattr(state, "screen", Screen.START.value)
 
     if screen == Screen.START.value:
         response = service.handle_action(
-            state.user_id,
+            identity,
             "streamlit",
             ACTION_NAME_ENTERED,
             build_payload(text=text),
@@ -69,7 +66,7 @@ def _handle_user_input(service, state, text: str) -> None:
 
     if screen == Screen.DIARY_WAIT.value:
         response = service.handle_action(
-            state.user_id,
+            identity,
             "streamlit",
             ACTION_DIARY_TEXT,
             {**_registered_payload(state), **build_payload(text=text, screen=screen)},
@@ -78,7 +75,7 @@ def _handle_user_input(service, state, text: str) -> None:
         return
 
     response = service.handle_action(
-        state.user_id,
+        identity,
         "streamlit",
         "raw",
         {
@@ -90,11 +87,6 @@ def _handle_user_input(service, state, text: str) -> None:
 
 
 def run_streamlit(config: dict[str, Any]) -> None:
-    """
-    Запускает streamlit-приложение.
-
-    :param config: конфиг из config.yaml
-    """
     import streamlit as st
 
     st.set_page_config(page_title="Template App", page_icon="🧪")
@@ -105,7 +97,12 @@ def run_streamlit(config: dict[str, Any]) -> None:
         _init_session(service, state)
 
     st.title("Template")
-    st.caption(f"user_id: {state.user_id} | экран: {state.screen}")
+    st.caption(
+        f"user_id: {state.user_id[:12]}… | "
+        f"internal: {state.internal_user_id} | "
+        f"external: {state.external_user_id[:8]}… | "
+        f"экран: {state.screen}"
+    )
     st.markdown(state.get("last_text", ""))
 
     screen = state.get("screen", Screen.START.value)

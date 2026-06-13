@@ -1,20 +1,5 @@
 # coding: utf-8
-"""
-Логирование в postgres (схема template).
-
-Цель:
-    Писать users и events через SQLAlchemy + pandas и psycopg2,
-    в стиле weather/data_load.py.
-
-Вход:
-    Секция logging из config.yaml.
-
-Выход:
-    Записи в template.users и template.events.
-
-Риски:
-    При недоступной БД методы выбросят исключение наверх.
-"""
+"""Логирование в postgres (схема template)."""
 
 from __future__ import annotations
 
@@ -25,7 +10,9 @@ from typing import Any
 import pandas as pd
 
 from core.db import get_connection, get_engine
+from core.identity import make_user_id
 from core.logging.base import EventLogger
+from core.models import UserIdentity
 
 
 class PostgresLogger(EventLogger):
@@ -35,32 +22,87 @@ class PostgresLogger(EventLogger):
         self.logging_config = logging_config
         self.schema = logging_config["schema"]
 
-    def allocate_user_id(self) -> int:
-        """
-        Берёт следующий user_id из sequence таблицы template.users.
-
-        :return: новый уникальный user_id
-        """
-        sequence_name = f"{self.schema}.users_user_id_seq"
-        query = f"SELECT nextval(%s)"
-
+    def _allocate_internal_user_id(self) -> int:
+        table_name = f"{self.schema}.users"
         conn = get_connection(self.logging_config)
         try:
             with conn.cursor() as cur:
-                cur.execute(query, (sequence_name,))
+                cur.execute(
+                    "SELECT pg_get_serial_sequence(%s, %s)",
+                    (table_name, "internal_user_id"),
+                )
+                seq_row = cur.fetchone()
+                if seq_row is None or not seq_row[0]:
+                    raise RuntimeError(
+                        "Не найден sequence для template.users.internal_user_id"
+                    )
+                cur.execute("SELECT nextval(%s)", (seq_row[0],))
                 row = cur.fetchone()
             conn.commit()
         finally:
             conn.close()
 
         if row is None:
-            raise RuntimeError("postgres не вернул user_id из sequence")
+            raise RuntimeError("postgres не вернул internal_user_id из sequence")
 
         return int(row[0])
 
+    def _find_user(
+        self, channel: str, external_user_id: str
+    ) -> UserIdentity | None:
+        """
+        Ищет пользователя по channel + external_user_id (главный ключ сессии).
+
+        Один человек = одна строка, даже если streamlit перезапустил скрипт.
+        """
+        table_name = f"{self.schema}.users"
+        conn = get_connection(self.logging_config)
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    SELECT user_id, internal_user_id, external_user_id
+                    FROM {table_name}
+                    WHERE registration_channel = %s AND external_user_id = %s
+                    """,
+                    (channel, external_user_id),
+                )
+                row = cur.fetchone()
+            conn.commit()
+        finally:
+            conn.close()
+
+        if row is None:
+            return None
+
+        return UserIdentity(
+            user_id=str(row[0]),
+            internal_user_id=int(row[1]),
+            external_user_id=str(row[2]),
+        )
+
+    def ensure_user(self, channel: str, external_user_id: str) -> UserIdentity:
+        existing = self._find_user(channel, external_user_id)
+        if existing is not None:
+            return existing
+
+        user_id = make_user_id(channel, external_user_id)
+        internal_user_id = self._allocate_internal_user_id()
+        identity = UserIdentity(user_id, internal_user_id, external_user_id)
+
+        now = datetime.now()
+        self.upsert_user(
+            identity,
+            user_name="",
+            registration_date=now,
+            registration_channel=channel,
+            last_active_at=now,
+        )
+        return identity
+
     def upsert_user(
         self,
-        user_id: int,
+        identity: UserIdentity,
         user_name: str,
         registration_date: datetime,
         registration_channel: str,
@@ -70,14 +112,16 @@ class PostgresLogger(EventLogger):
         is_active: bool = True,
     ) -> None:
         """
-        Создаёт или обновляет пользователя по user_id.
+        INSERT или UPDATE по user_id (hash).
 
-        При повторном вызове с тем же user_id поля перезаписываются.
+        internal_user_id и external_user_id при UPDATE не меняются.
         """
         table_name = f"{self.schema}.users"
         query = f"""
             INSERT INTO {table_name} (
                 user_id,
+                internal_user_id,
+                external_user_id,
                 user_name,
                 registration_date,
                 registration_channel,
@@ -86,7 +130,7 @@ class PostgresLogger(EventLogger):
                 is_trial,
                 is_active
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (user_id) DO UPDATE SET
                 user_name = EXCLUDED.user_name,
                 registration_date = EXCLUDED.registration_date,
@@ -103,7 +147,9 @@ class PostgresLogger(EventLogger):
                 cur.execute(
                     query,
                     (
-                        user_id,
+                        identity.user_id,
+                        identity.internal_user_id,
+                        identity.external_user_id,
                         user_name,
                         registration_date,
                         registration_channel,
@@ -119,15 +165,12 @@ class PostgresLogger(EventLogger):
 
     def log_event(
         self,
-        user_id: int,
+        identity: UserIdentity,
         event_name: str,
         channel: str,
         event_parameters: dict[str, Any] | None = None,
         timestamp: datetime | None = None,
     ) -> None:
-        """
-        Добавляет строку в template.events через pandas.to_sql.
-        """
         event_time = timestamp or datetime.now()
         params_json = None
         if event_parameters is not None:
@@ -135,7 +178,9 @@ class PostgresLogger(EventLogger):
 
         row = {
             "timestamp": event_time,
-            "user_id": user_id,
+            "user_id": identity.user_id,
+            "internal_user_id": identity.internal_user_id,
+            "external_user_id": identity.external_user_id,
             "event_name": event_name,
             "channel": channel,
             "event_parameters": params_json,

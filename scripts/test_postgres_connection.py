@@ -1,10 +1,5 @@
 # coding: utf-8
-"""
-Быстрая проверка подключения к postgres из config.yaml.
-
-Запуск:
-    python scripts/test_postgres_connection.py
-"""
+"""Проверка подключения к postgres."""
 
 from __future__ import annotations
 
@@ -32,8 +27,11 @@ def main() -> None:
         conn.close()
 
     logger = PostgresLogger(logging_cfg)
-    user_id = logger.allocate_user_id()
-    print(f"Подключение OK. Тестовый user_id из sequence: {user_id}")
+    identity = logger.ensure_user("console", "connection-test")
+    print("Подключение OK.")
+    print(f"  user_id (hash): {identity.user_id}")
+    print(f"  internal_user_id: {identity.internal_user_id}")
+    print(f"  external_user_id: {identity.external_user_id}")
 
 
 if __name__ == "__main__":

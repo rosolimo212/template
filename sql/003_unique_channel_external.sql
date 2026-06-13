@@ -1,0 +1,5 @@
+-- Уникальность: один external_user_id на канал = одна строка users.
+-- psql -h localhost -U roman -d iter_template_stage -f sql/003_unique_channel_external.sql
+
+CREATE UNIQUE INDEX IF NOT EXISTS users_channel_external_uidx
+    ON template.users (registration_channel, external_user_id);
