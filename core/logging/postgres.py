@@ -9,7 +9,7 @@ from typing import Any
 
 import pandas as pd
 
-from core.db import get_connection, get_engine
+from core.db import get_engine, postgres_connection
 from core.identity import make_user_id
 from core.logging.base import EventLogger
 from core.models import UserIdentity
@@ -24,8 +24,7 @@ class PostgresLogger(EventLogger):
 
     def _allocate_internal_user_id(self) -> int:
         table_name = f"{self.schema}.users"
-        conn = get_connection(self.logging_config)
-        try:
+        with postgres_connection(self.logging_config) as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     "SELECT pg_get_serial_sequence(%s, %s)",
@@ -38,9 +37,6 @@ class PostgresLogger(EventLogger):
                     )
                 cur.execute("SELECT nextval(%s)", (seq_row[0],))
                 row = cur.fetchone()
-            conn.commit()
-        finally:
-            conn.close()
 
         if row is None:
             raise RuntimeError("postgres не вернул internal_user_id из sequence")
@@ -56,8 +52,7 @@ class PostgresLogger(EventLogger):
         Один человек = одна строка, даже если streamlit перезапустил скрипт.
         """
         table_name = f"{self.schema}.users"
-        conn = get_connection(self.logging_config)
-        try:
+        with postgres_connection(self.logging_config) as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     f"""
@@ -68,9 +63,6 @@ class PostgresLogger(EventLogger):
                     (channel, external_user_id),
                 )
                 row = cur.fetchone()
-            conn.commit()
-        finally:
-            conn.close()
 
         if row is None:
             return None
@@ -83,8 +75,7 @@ class PostgresLogger(EventLogger):
 
     def get_user_profile(self, identity: UserIdentity) -> dict[str, Any] | None:
         table_name = f"{self.schema}.users"
-        conn = get_connection(self.logging_config)
-        try:
+        with postgres_connection(self.logging_config) as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     f"""
@@ -95,9 +86,6 @@ class PostgresLogger(EventLogger):
                     (identity.user_id,),
                 )
                 row = cur.fetchone()
-            conn.commit()
-        finally:
-            conn.close()
 
         if row is None:
             return None
@@ -167,8 +155,7 @@ class PostgresLogger(EventLogger):
                 is_active = EXCLUDED.is_active
         """
 
-        conn = get_connection(self.logging_config)
-        try:
+        with postgres_connection(self.logging_config) as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     query,
@@ -185,9 +172,6 @@ class PostgresLogger(EventLogger):
                         is_active,
                     ),
                 )
-            conn.commit()
-        finally:
-            conn.close()
 
     def log_event(
         self,

@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from core.config import load_app_config
-from core.db import get_connection
+from core.db import postgres_connection
 from core.logging.postgres import PostgresLogger
 
 
@@ -18,13 +18,10 @@ def main() -> None:
     config = load_app_config(ROOT / "config.yaml")
     logging_cfg = config["logging"]
 
-    conn = get_connection(logging_cfg)
-    try:
+    with postgres_connection(logging_cfg) as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT 1")
             assert cur.fetchone()[0] == 1
-    finally:
-        conn.close()
 
     logger = PostgresLogger(logging_cfg)
     identity = logger.ensure_user("console", "connection-test")

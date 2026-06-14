@@ -13,6 +13,8 @@ from typing import Any
 
 import requests
 
+from core.messages import message
+
 
 def get_current_temperature_with_timing(
     api_key: str,
@@ -40,7 +42,7 @@ def get_current_temperature_with_timing(
     except requests.RequestException as err:
         timings["http_request_sec"] = time.monotonic() - t0
         timings["total_sec"] = time.monotonic() - total_start
-        return f"Не удалось получить погоду: проблема с сетью ({err}).", timings
+        return message("weather_network_error", error=err), timings
     timings["http_request_sec"] = time.monotonic() - t0
 
     t0 = time.monotonic()
@@ -48,7 +50,7 @@ def get_current_temperature_with_timing(
         timings["parse_response_sec"] = time.monotonic() - t0
         timings["total_sec"] = time.monotonic() - total_start
         return (
-            f"Не удалось получить погоду: сервис вернул код {response.status_code}.",
+            message("weather_http_error", status_code=response.status_code),
             timings,
         )
 
@@ -63,12 +65,15 @@ def get_current_temperature_with_timing(
     except (KeyError, TypeError):
         timings["format_text_sec"] = time.monotonic() - t0
         timings["total_sec"] = time.monotonic() - total_start
-        return "Не удалось разобрать ответ сервиса погоды.", timings
+        return message("weather_parse_error"), timings
 
     temp_sign = "+" if temp_c > 0 else ""
-    text = (
-        f"В {place} сейчас {temp_sign}{temp_c}°C. "
-        f"На улице: {condition}."
+    text = message(
+        "weather_success",
+        place=place,
+        temp_sign=temp_sign,
+        temp_c=temp_c,
+        condition=condition,
     )
     timings["format_text_sec"] = time.monotonic() - t0
     timings["total_sec"] = time.monotonic() - total_start

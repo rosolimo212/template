@@ -11,11 +11,16 @@
 
 Выход:
     engine или connection для записи в схему template.
+
+Риски:
+    get_connection() возвращает «сырое» соединение — вызывающий обязан conn.close().
+    Предпочтительно: with postgres_connection(...) as conn — закрытие и commit/rollback автоматически.
 """
 
 from __future__ import annotations
 
-from typing import Any
+from contextlib import contextmanager
+from typing import Any, Generator
 
 import psycopg2
 from sqlalchemy import create_engine
@@ -42,6 +47,9 @@ def get_connection(logging_config: dict[str, Any]):
     """
     Открывает psycopg2-соединение для точечных SQL-запросов.
 
+    Вызывающий код обязан закрыть соединение (conn.close()) или использовать
+    postgres_connection() как context manager.
+
     :param logging_config: секция logging из config.yaml
     :return: psycopg2 connection
     """
@@ -52,3 +60,29 @@ def get_connection(logging_config: dict[str, Any]):
         user=logging_config["user"],
         password=logging_config["password"],
     )
+
+
+@contextmanager
+def postgres_connection(
+    logging_config: dict[str, Any],
+) -> Generator[Any, None, None]:
+    """
+    Context manager: commit при успехе, rollback при ошибке, close в finally.
+
+    Пример:
+        with postgres_connection(cfg) as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1")
+
+    :param logging_config: секция logging из config.yaml
+    :yield: psycopg2 connection
+    """
+    conn = get_connection(logging_config)
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()

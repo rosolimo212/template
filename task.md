@@ -150,3 +150,8 @@ cd /home/roman/python/kotelok/template
 streamlit run ui/streamlit_app.py
 
 
+Merge dev в prod
+cd /home/roman/python/kotelok/template
+git checkout main
+git merge dev          # fast-forward, без конфликтов
+git push origin main

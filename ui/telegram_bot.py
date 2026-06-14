@@ -19,7 +19,11 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import KeyboardButton, Message, ReplyKeyboardMarkup
 
-from core.brain import CHANGE_NAME_BUTTON, CONFIRM_NAME_BUTTON
+from core.messages import (
+    change_name_button,
+    confirm_name_button,
+    message,
+)
 from core.models import (
     ACTION_DIARY_TEXT,
     ACTION_NAME_CHANGE,
@@ -153,9 +157,9 @@ async def run_telegram(config: dict[str, Any]) -> None:
             screen=Screen.NAME_CONFIRM,
         )
 
-        if text == CONFIRM_NAME_BUTTON:
+        if text == confirm_name_button("telegram"):
             action = ACTION_NAME_CONFIRMED
-        elif text == CHANGE_NAME_BUTTON:
+        elif text == change_name_button("telegram"):
             action = ACTION_NAME_CHANGE
         else:
             action = ACTION_NAME_ENTERED

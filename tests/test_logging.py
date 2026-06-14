@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
 from core.identity import make_user_id
@@ -29,7 +30,11 @@ def test_postgres_allocate_internal_id_uses_sequence() -> None:
     mock_conn = MagicMock()
     mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
 
-    with patch("core.logging.postgres.get_connection", return_value=mock_conn):
+    @contextmanager
+    def _fake_scope(_cfg):
+        yield mock_conn
+
+    with patch("core.logging.postgres.postgres_connection", _fake_scope):
         internal = logger._allocate_internal_user_id()
 
     assert internal == 42
@@ -44,7 +49,11 @@ def test_postgres_ensure_user_returns_existing() -> None:
     mock_conn = MagicMock()
     mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
 
-    with patch("core.logging.postgres.get_connection", return_value=mock_conn):
+    @contextmanager
+    def _fake_scope(_cfg):
+        yield mock_conn
+
+    with patch("core.logging.postgres.postgres_connection", _fake_scope):
         identity = logger.ensure_user("telegram", "999")
 
     assert identity.user_id == user_id

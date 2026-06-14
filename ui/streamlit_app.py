@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from core.messages import button, message
 from core.models import ACTION_DIARY_TEXT, ACTION_NAME_ENTERED, Screen
 from ui.base import build_app_service
 from ui.helpers import (
@@ -89,14 +90,17 @@ def _handle_user_input(service, state, text: str) -> None:
 def run_streamlit(config: dict[str, Any]) -> None:
     import streamlit as st
 
-    st.set_page_config(page_title="Template App", page_icon="🧪")
+    st.set_page_config(
+        page_title=message("browser_page_title", "streamlit"),
+        page_icon="🧪",
+    )
     service = build_app_service(config)
     state = st.session_state
 
     if not state.get("initialized"):
         _init_session(service, state)
 
-    st.title("Template")
+    st.title(message("browser_title", "streamlit"))
     st.caption(
         f"user_id: {state.user_id[:12]}… | "
         f"internal: {state.internal_user_id} | "
@@ -108,21 +112,21 @@ def run_streamlit(config: dict[str, Any]) -> None:
     screen = state.get("screen", Screen.START.value)
 
     if screen == Screen.START.value:
-        name = st.text_input("Ваше имя", key="name_input")
-        if st.button("Продолжить", key="btn_start"):
+        name = st.text_input(message("browser_name_label", "streamlit"), key="name_input")
+        if st.button(message("browser_btn_continue", "streamlit"), key="btn_start"):
             _handle_user_input(service, state, name)
             st.rerun()
 
     elif screen == Screen.DIARY_WAIT.value:
-        diary = st.text_area("Запись в дневник", key="diary_input")
+        diary = st.text_area(message("browser_diary_label", "streamlit"), key="diary_input")
         cols = st.columns(2)
         with cols[0]:
-            if st.button("Сохранить", key="btn_diary_save"):
+            if st.button(message("browser_btn_save", "streamlit"), key="btn_diary_save"):
                 _handle_user_input(service, state, diary)
                 st.rerun()
         with cols[1]:
-            if st.button("В главное меню", key="btn_diary_back"):
-                _handle_user_input(service, state, "В главное меню")
+            if st.button(button("back_to_menu", "streamlit"), key="btn_diary_back"):
+                _handle_user_input(service, state, button("back_to_menu", "streamlit"))
                 st.rerun()
 
     else:

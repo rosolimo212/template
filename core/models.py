@@ -7,6 +7,12 @@
 
 Выход:
     dataclass-объекты, которые передаются между brain, app и logging.
+
+Сущности:
+    UserIdentity — тройка id пользователя (hash, internal, external).
+    AppResponse — что показать пользователю после шага сценария.
+    Screen — текущий экран FSM (start, main_menu, …).
+    ACTION_* — имена действий, которые UI передаёт в AppService.handle_action.
 """
 
 from __future__ import annotations
@@ -19,7 +25,13 @@ from typing import Any
 
 @dataclass(frozen=True)
 class UserIdentity:
-    """Тройка идентификаторов пользователя."""
+    """
+    Тройка идентификаторов пользователя.
+
+    user_id — sha256(channel:external_user_id), PK в postgres.
+    internal_user_id — BIGSERIAL для аналитики и FK.
+    external_user_id — uuid (streamlit/console) или telegram id.
+    """
 
     user_id: str
     internal_user_id: int
@@ -27,7 +39,11 @@ class UserIdentity:
 
 
 class Screen(str, Enum):
-    """Экраны пользовательского сценария MVP."""
+    """
+    Экраны пользовательского сценария MVP.
+
+    UI хранит screen в session state и передаёт в payload при handle_action.
+    """
 
     START = "start"
     NAME_CONFIRM = "name_confirm"
@@ -38,7 +54,7 @@ class Screen(str, Enum):
     DIARY_WAIT = "diary_wait"
 
 
-# Действия, которые UI передаёт в AppService.handle_action
+# Действия, которые UI передаёт в AppService.handle_action (не путать с event_name в логах).
 ACTION_NAME_ENTERED = "name_entered"
 ACTION_NAME_CONFIRMED = "name_confirmed"
 ACTION_NAME_CHANGE = "name_change"
@@ -51,7 +67,7 @@ ACTION_BACK_TO_MENU = "back_to_menu"
 
 @dataclass
 class UserRecord:
-    """Запись пользователя для таблицы template.users."""
+    """Запись пользователя для таблицы template.users (логирование)."""
 
     user_id: str
     internal_user_id: int
@@ -67,7 +83,7 @@ class UserRecord:
 
 @dataclass
 class EventRecord:
-    """Запись события для таблицы template.events."""
+    """Запись события для таблицы template.events (логирование)."""
 
     timestamp: datetime
     user_id: str
@@ -80,7 +96,12 @@ class EventRecord:
 
 @dataclass
 class AppResponse:
-    """Ответ ядра клиенту: текст, кнопки, следующий экран."""
+    """
+    Ответ ядра клиенту после обработки шага сценария.
+
+    UI не решает бизнес-логику — только показывает text/buttons и переходит на screen.
+    apply_response() в ui/helpers.py копирует поля в session state.
+    """
 
     text: str
     buttons: list[str] = field(default_factory=list)

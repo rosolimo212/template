@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from core.messages import message
 from core.models import ACTION_DIARY_TEXT, ACTION_NAME_ENTERED, Screen
 from ui.base import build_app_service
 from ui.helpers import (
@@ -36,7 +37,7 @@ def run_console(config: dict[str, Any]) -> None:
     response = service.handle_start(identity, "console")
     apply_response(state, response)
 
-    print("=== Template console ===")
+    print(message("console_banner", "console"))
     print(f"user_id (hash): {state['user_id']}")
     print(f"internal_user_id: {state['internal_user_id']}")
     print(f"external_user_id: {state['external_user_id']}")
@@ -71,7 +72,7 @@ def run_console(config: dict[str, Any]) -> None:
             continue
 
         if screen == Screen.DIARY_WAIT.value:
-            print("Введите запись (или 'меню' для возврата):")
+            print(message("console_diary_hint", "console"))
             text = input("> ").strip()
             if text.lower() in ("exit", "quit", "выход"):
                 break
@@ -93,7 +94,7 @@ def run_console(config: dict[str, Any]) -> None:
 
         buttons = state.get("buttons", [])
         if buttons:
-            print("Меню:")
+            print(message("console_menu_header", "console"))
             for idx, label in enumerate(buttons, start=1):
                 print(f"  {idx}. {label}")
             print("  0. Выход")
@@ -107,7 +108,7 @@ def run_console(config: dict[str, Any]) -> None:
             if 0 <= idx < len(buttons):
                 text = buttons[idx]
             else:
-                print("Нет такого пункта.")
+                print(message("console_invalid_choice", "console"))
                 continue
         else:
             text = choice
@@ -127,4 +128,4 @@ def run_console(config: dict[str, Any]) -> None:
         apply_response(state, response)
         _print_response(state)
 
-    print("До встречи.")
+    print(message("console_goodbye", "console"))

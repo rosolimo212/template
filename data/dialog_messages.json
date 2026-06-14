@@ -1,0 +1,277 @@
+{
+  "_description": "Тексты диалогов с пользователем. Пустая строка в console/telegram/browser — берётся default. Плейсхолдеры: {user_name}, {display}, {error}, {status_code}, {place}, {temp_sign}, {temp_c}, {condition}.",
+  "messages": [
+    {
+      "id": 1,
+      "name": "start_ask_name",
+      "when": "Первый визит: streamlit/console, или Telegram без @username. Экран START.",
+      "default": "Как вас зовут?",
+      "console": "",
+      "telegram": "",
+      "browser": ""
+    },
+    {
+      "id": 2,
+      "name": "empty_name",
+      "when": "Пользователь отправил пустое имя на экране START.",
+      "default": "Имя не может быть пустым. Как вас зовут?",
+      "console": "",
+      "telegram": "",
+      "browser": ""
+    },
+    {
+      "id": 3,
+      "name": "main_menu_greeting",
+      "when": "После успешной регистрации или повторного /start уже зарегистрированного пользователя. Экран MAIN_MENU.",
+      "default": "Приятно познакомиться, {user_name}!\n\nГлавное меню:\n1 — узнать текущую температуру в Москве\n2 — прочитать случайный анекдот\n3 — дорогой дневник: записать мысли о дне",
+      "console": "",
+      "telegram": "",
+      "browser": ""
+    },
+    {
+      "id": 4,
+      "name": "telegram_name_confirm",
+      "when": "Telegram: /start при наличии @username. Ник уже записан в БД, ждём подтверждения. Экран NAME_CONFIRM.",
+      "default": "Будем обращаться к вам как «{display}».\n\nЕсли хотите другое имя — нажмите «Изменить имя» или просто напишите его.",
+      "console": "",
+      "telegram": "",
+      "browser": ""
+    },
+    {
+      "id": 5,
+      "name": "change_name_prompt",
+      "when": "Telegram: пользователь нажал «Изменить имя» на экране NAME_CONFIRM.",
+      "default": "Как к вам обращаться?",
+      "console": "",
+      "telegram": "",
+      "browser": ""
+    },
+    {
+      "id": 6,
+      "name": "main_menu_reminder",
+      "when": "Главное меню: ввод не распознан как пункт меню.",
+      "default": "Выберите пункт из главного меню.",
+      "console": "",
+      "telegram": "",
+      "browser": ""
+    },
+    {
+      "id": 7,
+      "name": "diary_prompt",
+      "when": "Пользователь выбрал пункт «Дорогой дневник». Экран DIARY_WAIT.",
+      "default": "Дорогой дневник: напишите мысли о текущем дне в свободной форме.",
+      "console": "",
+      "telegram": "",
+      "browser": ""
+    },
+    {
+      "id": 8,
+      "name": "diary_empty",
+      "when": "Экран дневника: отправлена пустая запись.",
+      "default": "Запись не может быть пустой. Напишите хотя бы одно слово.",
+      "console": "",
+      "telegram": "",
+      "browser": ""
+    },
+    {
+      "id": 9,
+      "name": "diary_saved",
+      "when": "Экран дневника: запись успешно принята и залогирована.",
+      "default": "Запись сохранена. Спасибо, что поделились!",
+      "console": "",
+      "telegram": "",
+      "browser": ""
+    },
+    {
+      "id": 10,
+      "name": "weather_network_error",
+      "when": "Пункт меню «Температура»: сеть недоступна или таймаут weatherapi.",
+      "default": "Не удалось получить погоду: проблема с сетью ({error}).",
+      "console": "",
+      "telegram": "",
+      "browser": ""
+    },
+    {
+      "id": 11,
+      "name": "weather_http_error",
+      "when": "Пункт меню «Температура»: weatherapi вернул не-200.",
+      "default": "Не удалось получить погоду: сервис вернул код {status_code}.",
+      "console": "",
+      "telegram": "",
+      "browser": ""
+    },
+    {
+      "id": 12,
+      "name": "weather_parse_error",
+      "when": "Пункт меню «Температура»: ответ API неожиданной структуры.",
+      "default": "Не удалось разобрать ответ сервиса погоды.",
+      "console": "",
+      "telegram": "",
+      "browser": ""
+    },
+    {
+      "id": 13,
+      "name": "weather_success",
+      "when": "Пункт меню «Температура»: успешный ответ weatherapi.",
+      "default": "В {place} сейчас {temp_sign}{temp_c}°C. На улице: {condition}.",
+      "console": "",
+      "telegram": "",
+      "browser": ""
+    },
+    {
+      "id": 14,
+      "name": "console_banner",
+      "when": "Консоль: заголовок при старте сессии (техническая информация).",
+      "default": "=== Template console ===",
+      "console": "",
+      "telegram": "",
+      "browser": ""
+    },
+    {
+      "id": 15,
+      "name": "console_diary_hint",
+      "when": "Консоль: подсказка перед вводом записи дневника.",
+      "default": "Введите запись (или 'меню' для возврата):",
+      "console": "",
+      "telegram": "",
+      "browser": ""
+    },
+    {
+      "id": 16,
+      "name": "console_menu_header",
+      "when": "Консоль: заголовок списка пунктов меню.",
+      "default": "Меню:",
+      "console": "",
+      "telegram": "",
+      "browser": ""
+    },
+    {
+      "id": 17,
+      "name": "console_invalid_choice",
+      "when": "Консоль: выбран несуществующий номер пункта меню.",
+      "default": "Нет такого пункта.",
+      "console": "",
+      "telegram": "",
+      "browser": ""
+    },
+    {
+      "id": 18,
+      "name": "console_goodbye",
+      "when": "Консоль: выход из приложения (exit/quit/0).",
+      "default": "До встречи.",
+      "console": "",
+      "telegram": "",
+      "browser": ""
+    },
+    {
+      "id": 19,
+      "name": "browser_page_title",
+      "when": "Streamlit: заголовок вкладки браузера.",
+      "default": "Template App",
+      "console": "",
+      "telegram": "",
+      "browser": ""
+    },
+    {
+      "id": 20,
+      "name": "browser_title",
+      "when": "Streamlit: заголовок H1 на странице.",
+      "default": "Template",
+      "console": "",
+      "telegram": "",
+      "browser": ""
+    },
+    {
+      "id": 21,
+      "name": "browser_name_label",
+      "when": "Streamlit: подпись поля ввода имени на экране START.",
+      "default": "Ваше имя",
+      "console": "",
+      "telegram": "",
+      "browser": ""
+    },
+    {
+      "id": 22,
+      "name": "browser_btn_continue",
+      "when": "Streamlit: кнопка отправки имени.",
+      "default": "Продолжить",
+      "console": "",
+      "telegram": "",
+      "browser": ""
+    },
+    {
+      "id": 23,
+      "name": "browser_diary_label",
+      "when": "Streamlit: подпись поля дневника.",
+      "default": "Запись в дневник",
+      "console": "",
+      "telegram": "",
+      "browser": ""
+    },
+    {
+      "id": 24,
+      "name": "browser_btn_save",
+      "when": "Streamlit: кнопка сохранения дневника.",
+      "default": "Сохранить",
+      "console": "",
+      "telegram": "",
+      "browser": ""
+    }
+  ],
+  "buttons": [
+    {
+      "id": 101,
+      "name": "menu_option_1",
+      "when": "Главное меню: кнопка запроса погоды. Текст кнопки = текст для match_menu_button.",
+      "default": "Температура в Москве",
+      "console": "",
+      "telegram": "",
+      "browser": ""
+    },
+    {
+      "id": 102,
+      "name": "menu_option_2",
+      "when": "Главное меню: кнопка случайного анекдота.",
+      "default": "Случайный анекдот",
+      "console": "",
+      "telegram": "",
+      "browser": ""
+    },
+    {
+      "id": 103,
+      "name": "menu_option_3",
+      "when": "Главное меню: кнопка дневника.",
+      "default": "Дорогой дневник",
+      "console": "",
+      "telegram": "",
+      "browser": ""
+    },
+    {
+      "id": 104,
+      "name": "back_to_menu",
+      "when": "Экран дневника: возврат в главное меню.",
+      "default": "В главное меню",
+      "console": "",
+      "telegram": "",
+      "browser": ""
+    },
+    {
+      "id": 105,
+      "name": "confirm_name",
+      "when": "Telegram NAME_CONFIRM: подтвердить автоматический @ник.",
+      "default": "Всё верно",
+      "console": "",
+      "telegram": "",
+      "browser": ""
+    },
+    {
+      "id": 106,
+      "name": "change_name",
+      "when": "Telegram NAME_CONFIRM: запросить другое имя.",
+      "default": "Изменить имя",
+      "console": "",
+      "telegram": "",
+      "browser": ""
+    }
+  ]
+}

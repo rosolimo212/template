@@ -1,5 +1,16 @@
 # coding: utf-8
-"""AppService — оркестратор ядра."""
+"""
+AppService — оркестратор ядра.
+
+Цель:
+    Единая точка входа бизнес-логики для streamlit, telegram и console.
+
+Поток:
+    UI → handle_start / handle_action(identity, channel, action, payload)
+    → brain (тексты из dialog_messages.json) → collectors / logger.
+
+AppResponse возвращается в UI; payload несёт контекст шага (см. ui/helpers.build_payload).
+"""
 
 from __future__ import annotations
 
@@ -8,8 +19,6 @@ from pathlib import Path
 from typing import Any
 
 from core.brain import (
-    CHANGE_NAME_BUTTON,
-    CONFIRM_NAME_BUTTON,
     is_back_to_menu,
     match_menu_button,
     on_change_name_prompt,
@@ -24,6 +33,7 @@ from core.brain import (
     on_start,
     on_telegram_name_confirm,
 )
+from core.messages import change_name_button, confirm_name_button
 from core.collectors.jokes import get_random_joke
 from core.collectors.weather import get_current_temperature
 from core.logging.base import EventLogger
@@ -83,7 +93,7 @@ class AppService:
                 channel=channel,
                 event_parameters=None,
             )
-            return on_name_entered(existing_name)
+            return on_name_entered(existing_name, channel)
 
         self._ensure_user_stub(identity, channel)
         self.logger.log_event(
@@ -104,7 +114,7 @@ class AppService:
                     confirm=True,
                 )
 
-        return on_start()
+        return on_start(channel)
 
     def _ensure_user_stub(self, identity: UserIdentity, channel: str) -> None:
         now = datetime.now()
@@ -132,7 +142,7 @@ class AppService:
             return self._handle_name_confirmed(identity, channel, payload)
 
         if action == ACTION_NAME_CHANGE:
-            return on_change_name_prompt()
+            return on_change_name_prompt(channel)
 
         if action == ACTION_OPTION_1:
             return self._handle_option_1(identity, channel, payload)
@@ -153,7 +163,7 @@ class AppService:
         if raw_text:
             return self._handle_raw_text(identity, channel, payload, raw_text)
 
-        return on_main_menu_reminder()
+        return on_main_menu_reminder(channel)
 
     def _handle_raw_text(
         self,
@@ -170,22 +180,22 @@ class AppService:
             return self._handle_name_entered(identity, channel, payload_with_text)
 
         if screen == Screen.NAME_CONFIRM.value or screen == Screen.NAME_CONFIRM:
-            if raw_text == CONFIRM_NAME_BUTTON:
+            if raw_text == confirm_name_button(channel):
                 return self._handle_name_confirmed(identity, channel, payload)
-            if raw_text == CHANGE_NAME_BUTTON:
-                return on_change_name_prompt()
+            if raw_text == change_name_button(channel):
+                return on_change_name_prompt(channel)
             payload_with_text = dict(payload)
             payload_with_text["text"] = raw_text
             return self._handle_name_entered(identity, channel, payload_with_text)
 
         if screen == Screen.DIARY_WAIT.value or screen == Screen.DIARY_WAIT:
-            if is_back_to_menu(raw_text):
+            if is_back_to_menu(raw_text, channel):
                 return self._handle_back_to_menu(identity, channel, payload)
             payload_with_text = dict(payload)
             payload_with_text["text"] = raw_text
             return self._handle_diary_text(identity, channel, payload_with_text)
 
-        matched = match_menu_button(raw_text)
+        matched = match_menu_button(raw_text, channel)
         if matched == "option_1":
             return self._handle_option_1(identity, channel, payload)
         if matched == "option_2":
@@ -194,7 +204,7 @@ class AppService:
             return self._handle_option_3(identity, channel, payload)
 
         self._touch_user(identity, channel, payload)
-        return on_main_menu_reminder()
+        return on_main_menu_reminder(channel)
 
     def _register_with_name(
         self,
@@ -224,14 +234,14 @@ class AppService:
             },
         )
         if confirm:
-            return on_telegram_name_confirm(user_name)
+            return on_telegram_name_confirm(user_name, channel)
         self.logger.log_event(
             identity=identity,
             event_name="main_menu_visit",
             channel=channel,
             event_parameters=None,
         )
-        return on_name_entered(user_name)
+        return on_name_entered(user_name, channel)
 
     def _handle_name_confirmed(
         self,
@@ -241,7 +251,7 @@ class AppService:
     ) -> AppResponse:
         user_name = str(payload.get("user_name", "")).strip()
         if not user_name:
-            return on_empty_name()
+            return on_empty_name(channel)
 
         identity = self._resolve_identity(identity, channel)
         self._touch_user(identity, channel, payload)
@@ -251,7 +261,7 @@ class AppService:
             channel=channel,
             event_parameters=None,
         )
-        return on_name_entered(user_name)
+        return on_name_entered(user_name, channel)
 
     def _handle_name_entered(
         self,
@@ -261,7 +271,7 @@ class AppService:
     ) -> AppResponse:
         user_name = str(payload.get("text", "")).strip()
         if not user_name:
-            return on_empty_name()
+            return on_empty_name(channel)
 
         identity = self._resolve_identity(identity, channel)
         return self._register_with_name(
@@ -293,7 +303,7 @@ class AppService:
             method=weather_cfg["method"],
             city=weather_cfg["city"],
         )
-        return on_option_1_result(weather_text)
+        return on_option_1_result(weather_text, channel)
 
     def _handle_option_2(
         self,
@@ -310,7 +320,7 @@ class AppService:
         )
 
         joke_text = get_random_joke(Path(self.jokes_path))
-        return on_option_2_result(joke_text)
+        return on_option_2_result(joke_text, channel)
 
     def _handle_option_3(
         self,
@@ -325,7 +335,7 @@ class AppService:
             channel=channel,
             event_parameters=None,
         )
-        return on_option_3_prompt()
+        return on_option_3_prompt(channel)
 
     def _handle_diary_text(
         self,
@@ -335,7 +345,7 @@ class AppService:
     ) -> AppResponse:
         diary_text = str(payload.get("text", "")).strip()
         if not diary_text:
-            return on_diary_empty()
+            return on_diary_empty(channel)
 
         self._touch_user(identity, channel, payload)
         self.logger.log_event(
@@ -344,7 +354,7 @@ class AppService:
             channel=channel,
             event_parameters={"text": diary_text},
         )
-        return on_diary_saved()
+        return on_diary_saved(channel)
 
     def _handle_back_to_menu(
         self,
@@ -359,7 +369,7 @@ class AppService:
             channel=channel,
             event_parameters=None,
         )
-        return on_main_menu_reminder()
+        return on_main_menu_reminder(channel)
 
     def _touch_user(
         self,
