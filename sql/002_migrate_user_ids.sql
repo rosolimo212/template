@@ -5,7 +5,7 @@
 --   2. sql/000_diagnose_schema.sql  (проверка)
 --   3. этот файл (от roman)
 --
---   psql -h localhost -U roman -d iter_template_stage -f sql/002_migrate_user_ids.sql
+--   psql -h localhost -U roman -d communication -f sql/002_migrate_user_ids.sql
 
 \set ON_ERROR_STOP on
 

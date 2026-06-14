@@ -8,7 +8,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DB_NAME="${DB_NAME:-iter_template_stage}"
+DB_NAME="${DB_NAME:-communication}"
 DB_USER="${DB_USER:-roman}"
 
 echo "=== Диагностика ДО миграции ==="

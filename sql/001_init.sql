@@ -1,5 +1,10 @@
--- Схема template (актуальная версия для новых установок).
--- Для уже существующей базы: sql/002_migrate_user_ids.sql
+-- Схема template в базе communication (одинаково на stage и prod).
+-- Каждый сервис — отдельная схема по этому шаблону (users, events).
+--
+-- Новая установка (от roman):
+--   psql -h localhost -U roman -d communication -f sql/001_init.sql
+--
+-- Для уже существующей базы со старым BIGINT user_id: sql/002_migrate_user_ids.sql
 
 CREATE SCHEMA IF NOT EXISTS template;
 

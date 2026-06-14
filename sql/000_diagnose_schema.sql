@@ -1,5 +1,5 @@
 -- Диагностика схемы template.
--- psql -h localhost -U roman -d iter_template_stage -f sql/000_diagnose_schema.sql
+-- psql -h localhost -U roman -d communication -f sql/000_diagnose_schema.sql
 
 \echo '=== template.users ==='
 SELECT column_name, data_type, is_nullable

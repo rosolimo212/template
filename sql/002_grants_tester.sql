@@ -1,6 +1,6 @@
 -- Права роли tester на схему template.
--- Подключайтесь к нужной базе (stage или prod) от roman:
---   psql -h localhost -U roman -d iter_template_stage -f sql/002_grants_tester.sql
+-- Подключайтесь к базе communication от roman:
+--   psql -h localhost -U roman -d communication -f sql/002_grants_tester.sql
 --
 -- GRANT CONNECT на базу выполняется в shell-скрипте отдельно.
 

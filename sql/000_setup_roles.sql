@@ -21,7 +21,7 @@ BEGIN
 END
 $$;
 
--- roman — владелец stage-базы, создаёт схемы и таблицы
+-- roman — владелец базы communication, создаёт схемы и таблицы
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'roman') THEN
