@@ -8,7 +8,7 @@
 
 Поэтому:
     читаем — st.context.cookies;
-    пишем — st.html + document.cookie на том же origin (свой домен за nginx).
+    пишем — components.html + document.cookie на том же origin (свой домен за nginx).
 
 В cookie храним ТОЛЬКО external_user_id (uuid).
 Экран и имя — из postgres через handle_start (не из cookie: иначе stale screen=start).
@@ -88,21 +88,23 @@ def read_external_id_from_cookies(cookies: Any) -> str | None:
 
 def persist_external_id_cookie(external_id: str) -> None:
     """
-    Записывает cookie в браузер через st.html (конец прогона скрипта).
+    Записывает cookie в браузер (конец прогона скрипта).
 
-    На следующем HTTP-запросе id будет в st.context.cookies.
+    components.html — совместим со всеми версиями Streamlit 1.37+;
+    st.html() не везде принимает height=0.
     """
     if not is_valid_external_id(external_id):
         return
 
-    import streamlit as st
+    import streamlit.components.v1 as components
 
     safe = external_id.strip()
-    st.html(
+    components.html(
         f"""<script>
         document.cookie = "{EXTERNAL_COOKIE_NAME}={safe}; path=/; max-age={COOKIE_MAX_AGE_SEC}; SameSite=Lax";
         </script>""",
         height=0,
+        width=0,
     )
 
 
