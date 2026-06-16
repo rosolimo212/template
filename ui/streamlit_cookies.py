@@ -1,94 +1,126 @@
 # coding: utf-8
 """
-Cookie-сессия браузера для Streamlit.
+Долгоживущий external_user_id для Streamlit.
 
-Цель:
-    После закрытия вкладки вернуть того же пользователя (external_user_id)
-    и последний экран без повторной регистрации.
+Официально (Streamlit docs):
+    st.context.cookies — только чтение cookie из HTTP-запроса (работает после F5).
+    Записи cookie в API Streamlit нет; st.session_state сбрасывается при refresh.
 
-Хранится в cookie template_browser_session (JSON, max-age 365 дней):
-    external_user_id, screen, user_name, registration_date
+Поэтому:
+    читаем — st.context.cookies;
+    пишем — st.html + document.cookie на том же origin (свой домен за nginx).
 
-Streamlit session_state живёт только пока открыта сессия WebSocket;
-cookie — мост между визитами одного браузера.
+В cookie храним ТОЛЬКО external_user_id (uuid).
+Экран и имя — из postgres через handle_start (не из cookie: иначе stale screen=start).
+
+Legacy: template_browser_session (JSON) — читаем только external_user_id.
 """
 
 from __future__ import annotations
 
+import base64
 import json
-from datetime import datetime, timedelta, timezone
+import re
+import uuid
 from typing import Any
 
-COOKIE_NAME = "template_browser_session"
-COOKIE_MAX_AGE_DAYS = 365
+EXTERNAL_COOKIE_NAME = "template_external_id"
+LEGACY_COOKIE_NAME = "template_browser_session"
+COOKIE_MAX_AGE_SEC = 365 * 86400
+
+_UUID_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+    re.IGNORECASE,
+)
 
 
-def session_cookie_payload(state: dict[str, Any]) -> dict[str, str]:
-    """
-    Собирает данные для записи в cookie из session state.
-
-    :param state: st.session_state (dict-like)
-    :return: только непустые строковые поля
-    """
-    payload: dict[str, str] = {}
-
-    external = state.get("external_user_id")
-    if external:
-        payload["external_user_id"] = str(external)
-
-    screen = state.get("screen")
-    if screen:
-        payload["screen"] = str(screen)
-
-    user_name = state.get("user_name")
-    if user_name:
-        payload["user_name"] = str(user_name)
-
-    reg_date = state.get("registration_date")
-    if reg_date:
-        payload["registration_date"] = str(reg_date)
-
-    return payload
+def is_valid_external_id(value: str) -> bool:
+    return bool(_UUID_RE.match(value.strip()))
 
 
-def encode_session_cookie(payload: dict[str, str]) -> str:
-    """JSON для значения cookie (без пробелов — компактнее)."""
-    return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+def new_streamlit_external_id() -> str:
+    return str(uuid.uuid4())
 
 
-def decode_session_cookie(raw: str | None) -> dict[str, str]:
-    """
-    Разбирает cookie; при ошибке — пустой dict (новый визит).
+def _external_from_legacy_blob(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        raw = value.get("external_user_id")
+        if raw and is_valid_external_id(str(raw)):
+            return str(raw).strip()
+        return None
+    if not isinstance(value, str) or not value:
+        return None
 
-    :param raw: строка из cookie или None
-    """
-    if not raw:
-        return {}
+    parsed: Any = None
     try:
-        data = json.loads(raw)
-    except json.JSONDecodeError:
-        return {}
-    if not isinstance(data, dict):
-        return {}
-    return {str(k): str(v) for k, v in data.items() if v is not None and str(v).strip()}
+        decoded = base64.urlsafe_b64decode(value.encode("ascii")).decode("utf-8")
+        parsed = json.loads(decoded)
+    except (ValueError, json.JSONDecodeError):
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return None
+
+    if isinstance(parsed, dict):
+        raw = parsed.get("external_user_id")
+        if raw and is_valid_external_id(str(raw)):
+            return str(raw).strip()
+    return None
 
 
-def apply_cookie_to_state(state: dict[str, Any], cookie_data: dict[str, str]) -> None:
+def read_external_id_from_cookies(cookies: Any) -> str | None:
     """
-    Восстанавливает поля session state из cookie (до init_user_identity).
+    Читает uuid из st.context.cookies.
 
-    external_user_id из cookie → тот же пользователь в postgres.
+    :param cookies: st.context.cookies (dict-like)
     """
-    if cookie_data.get("external_user_id"):
-        state["external_user_id"] = cookie_data["external_user_id"]
-    if cookie_data.get("screen"):
-        state["screen"] = cookie_data["screen"]
-    if cookie_data.get("user_name"):
-        state["user_name"] = cookie_data["user_name"]
-    if cookie_data.get("registration_date"):
-        state["registration_date"] = cookie_data["registration_date"]
+    if cookies is None:
+        return None
+
+    direct = cookies.get(EXTERNAL_COOKIE_NAME)
+    if direct and is_valid_external_id(str(direct)):
+        return str(direct).strip()
+
+    return _external_from_legacy_blob(cookies.get(LEGACY_COOKIE_NAME))
 
 
-def cookie_expires_at() -> datetime:
-    """Срок жизни cookie для CookieManager."""
-    return datetime.now(timezone.utc) + timedelta(days=COOKIE_MAX_AGE_DAYS)
+def persist_external_id_cookie(external_id: str) -> None:
+    """
+    Записывает cookie в браузер через st.html (конец прогона скрипта).
+
+    На следующем HTTP-запросе id будет в st.context.cookies.
+    """
+    if not is_valid_external_id(external_id):
+        return
+
+    import streamlit as st
+
+    safe = external_id.strip()
+    st.html(
+        f"""<script>
+        document.cookie = "{EXTERNAL_COOKIE_NAME}={safe}; path=/; max-age={COOKIE_MAX_AGE_SEC}; SameSite=Lax";
+        </script>""",
+        height=0,
+    )
+
+
+def resolve_external_user_id(state: dict[str, Any], cookies: Any) -> str:
+    """
+    Один stable external_user_id на браузер: cookie → state → новый uuid.
+
+    Не трогает screen / user_name.
+    """
+    from_cookie = read_external_id_from_cookies(cookies)
+    if from_cookie:
+        state["external_user_id"] = from_cookie
+        return from_cookie
+
+    existing = state.get("external_user_id")
+    if existing and is_valid_external_id(str(existing)):
+        return str(existing)
+
+    new_id = new_streamlit_external_id()
+    state["external_user_id"] = new_id
+    return new_id

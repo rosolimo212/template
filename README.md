@@ -137,7 +137,7 @@ All dialogs live in `data/dialog_messages.json`:
 
 Edit JSON, not Python, to change copy. Code loads texts via `core/messages.py`.
 
-**Streamlit returning users:** browser cookie `template_browser_session` stores `external_user_id`, screen, and name (365 days). Requires `extra-streamlit-components` (see `requirements.txt`). After deploy: `pip install -r requirements.txt` and restart Streamlit.
+**Streamlit returning users:** cookie `template_external_id` (read: `st.context.cookies`, write: `st.html`). Only `external_user_id` — screen/name from postgres via `handle_start`. Streamlit >= 1.37.
 
 ---
 
@@ -283,7 +283,7 @@ python main.py
 
 Правки текстов — в JSON, код читает через `core/messages.py`.
 
-**Streamlit — повторный визит:** cookie `template_browser_session` хранит `external_user_id`, экран и имя (365 дней). Нужен пакет `extra-streamlit-components` (`pip install -r requirements.txt`), перезапуск Streamlit после обновления.
+**Streamlit — повторный визит:** cookie `template_external_id` (чтение `st.context.cookies`, запись `st.html`). Только uuid; экран и имя — из БД. Streamlit >= 1.37.
 
 ---
 
