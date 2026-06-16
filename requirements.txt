@@ -7,3 +7,4 @@ PyYAML>=6,<7
 requests>=2.31,<3
 SQLAlchemy>=2.0,<3
 streamlit>=1.32,<2
+extra-streamlit-components>=0.1.60,<0.2

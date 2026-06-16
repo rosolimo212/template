@@ -135,6 +135,7 @@ def init_user_identity(service, state: dict[str, Any], channel: str) -> UserIden
     if not state.get("external_user_id"):
         state["external_user_id"] = new_external_user_id(channel)
 
+    # external_user_id может быть заранее подставлен из cookie (Streamlit).
     identity = service.logger.ensure_user(channel, str(state["external_user_id"]))
     store_identity(state, identity)
     return identity
